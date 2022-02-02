@@ -266,4 +266,128 @@ pub type Wrap32 = Wrap<f32>;
 pub type Wrap64 = Wrap<f64>;
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    macro_rules! assert_abs {
+        ($lhs: expr, $rhs: expr, $ep: expr) => {
+            assert!(($lhs - $rhs).abs() < $ep, "{} - {} >= {}", $lhs, $rhs, $ep)
+        };
+    }
+    macro_rules! assert_epsilon {
+        ($lhs: expr, $rhs: expr) => {
+            assert_abs!($lhs, $rhs, std::f64::EPSILON)
+        };
+    }
+
+    use std::f64::consts::PI;
+
+    #[test]
+    fn consts() {
+        assert_epsilon!(Rad64::ZERO.val(), 0.0);
+        assert_epsilon!(Rad64::QUARTER_TURN.val(), PI / 2.0);
+        assert_epsilon!(Rad64::HALF_TURN.val(), PI);
+        assert_epsilon!(Rad64::FULL_TURN.val(), 2.0 * PI);
+
+        assert_epsilon!(Wrap64::ZERO.val(), 0.0);
+        assert_epsilon!(Wrap64::QUARTER_TURN.val(), PI / 2.0);
+        assert_epsilon!(Wrap64::HALF_TURN.val(), PI);
+        assert_epsilon!(Wrap64::FULL_TURN.val(), 2.0 * PI);
+    }
+
+    #[test]
+    fn rad_ops() {
+        let sum = Rad64::HALF_TURN + Rad64::HALF_TURN;
+        assert_epsilon!(sum.val(), 2.0 * PI);
+
+        let diff = Rad64::FULL_TURN - Rad64::HALF_TURN;
+        assert_epsilon!(diff.val(), PI);
+
+        let neg = -Rad64::HALF_TURN;
+        assert_epsilon!(neg.val(), -PI);
+
+        let prod = Rad64::HALF_TURN * 3.0;
+        assert_epsilon!(prod.val(), PI * 3.0);
+
+        let quot = Rad64::FULL_TURN / 3.0;
+        assert_epsilon!(quot.val(), PI * 2.0 / 3.0);
+
+        let mut val = Rad64::HALF_TURN;
+        val += Rad64::HALF_TURN;
+        assert_epsilon!(val.val(), 2.0 * PI);
+
+        let mut val = Rad64::FULL_TURN;
+        val -= Rad64::HALF_TURN;
+        assert_epsilon!(val.val(), PI);
+
+        let mut val = Rad64::HALF_TURN;
+        val *= 3.0;
+        assert_epsilon!(val.val(), 3.0 * PI);
+
+        let mut val = Rad64::FULL_TURN;
+        val /= 3.0;
+        assert_epsilon!(val.val(), PI * 2.0 / 3.0);
+    }
+
+    #[test]
+    fn wrap() {
+        let wrap = Rad64::HALF_TURN.wrap();
+        assert_epsilon!(wrap.val(), PI);
+
+        let wrap = (-Rad64::HALF_TURN).wrap();
+        assert_epsilon!(wrap.val(), PI);
+
+        let wrap = (Rad64::HALF_TURN * 1.5).wrap();
+        assert_epsilon!(wrap.val(), -PI / 2.0);
+
+        let wrap = (-Rad64::HALF_TURN * 1.5).wrap();
+        assert_epsilon!(wrap.val(), PI / 2.0);
+    }
+
+    #[test]
+    fn wrap_ops() {
+        let sum = Wrap64::HALF_TURN + Wrap64::HALF_TURN;
+        assert_epsilon!(sum.val(), 0.0);
+        let sum = Wrap64::HALF_TURN + Wrap64::FULL_TURN;
+        assert_epsilon!(sum.val(), PI);
+
+        let diff = Wrap64::HALF_TURN - Wrap64::HALF_TURN;
+        assert_epsilon!(diff.val(), 0.0);
+        let diff = Wrap64::HALF_TURN - Wrap64::FULL_TURN;
+        assert_epsilon!(diff.val(), PI);
+        let diff = Wrap64::QUARTER_TURN - Wrap64::HALF_TURN;
+        assert_epsilon!(diff.val(), -PI / 2.0);
+
+        let neg = -Wrap64::HALF_TURN;
+        assert_epsilon!(neg.val(), PI);
+
+        let prod = Wrap64::QUARTER_TURN * 2.0;
+        assert_epsilon!(prod.val(), PI);
+        let prod = Wrap64::HALF_TURN * 3.0;
+        assert_epsilon!(prod.val(), PI);
+        let prod = Wrap64::QUARTER_TURN * -5.0;
+        assert_epsilon!(prod.val(), -PI / 2.0);
+
+        let quot = Wrap64::HALF_TURN / 2.0;
+        assert_epsilon!(quot.val(), PI / 2.0);
+
+        let mut val = Wrap64::QUARTER_TURN;
+        val += Wrap64::HALF_TURN;
+        assert_epsilon!(val.val(), -PI / 2.0);
+
+        let mut val = Wrap64::HALF_TURN;
+        val -= Wrap64::FULL_TURN;
+        assert_epsilon!(val.val(), PI);
+        let mut val = Wrap64::ZERO;
+        val -= Wrap64::HALF_TURN;
+        assert_epsilon!(val.val(), PI);
+
+        let mut val = Wrap64::QUARTER_TURN;
+        val *= 5.0;
+        assert_epsilon!(val.val(), PI / 2.0);
+
+        let mut val = Wrap64::QUARTER_TURN;
+        val /= 2.0;
+        assert_epsilon!(val.val(), PI / 4.0);
+    }
+}
