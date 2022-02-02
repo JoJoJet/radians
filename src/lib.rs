@@ -1,4 +1,4 @@
-use std::{fmt, ops};
+use std::{fmt, marker::PhantomData, ops};
 
 /// A floating-point number that serves as the backing value of an [`Angle`].
 pub trait Float: num_traits::Float {
@@ -10,6 +10,14 @@ pub trait Float: num_traits::Float {
     const PI_OVER_TWO: Self;
     /// The full circle constant (τ)
     const TAU: Self;
+    /// The number 60.
+    const SIXTY: Self;
+    /// The number 90.
+    const NINETY: Self;
+    /// The number 180.
+    const ONE_EIGHTY: Self;
+    /// The number 360.
+    const THREE_SIXTY: Self;
 
     /// Modulus operation.
     fn rem_euclid(self, _: Self) -> Self;
@@ -22,6 +30,10 @@ macro_rules! impl_float {
             const PI: $f = std::$f::consts::PI;
             const PI_OVER_TWO: $f = std::$f::consts::PI / 2.0;
             const TAU: $f = std::$f::consts::TAU;
+            const SIXTY: $f = 60.0;
+            const NINETY: $f = 90.0;
+            const ONE_EIGHTY: $f = 180.0;
+            const THREE_SIXTY: $f = 360.0;
 
             #[inline]
             fn rem_euclid(self, rhs: Self) -> Self {
@@ -34,105 +46,151 @@ macro_rules! impl_float {
 impl_float!(f32);
 impl_float!(f64);
 
-/// An angle measured in radians.
+/// A unit of measurement for an [`Angle`].
+pub trait Unit<F: Float>: Sized {
+    /// Number for a quarter turn around a circle in this unit space.
+    const QUARTER_TURN: F;
+    /// Number for a half turn around a circle in this unit space.
+    const HALF_TURN: F;
+    /// Number for a full turn around a circle in this unit space.
+    const FULL_TURN: F;
+
+    fn display(val: F, f: &mut fmt::Formatter) -> fmt::Result
+    where
+        F: fmt::Display;
+}
+
+/// An angle backed by a floating-point number.
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
-pub struct Rad<F: Float>(F);
+pub struct Angle<F: Float, U: Unit<F>>(F, PhantomData<U>);
 
-impl<F: Float> Rad<F> {
+impl<F: Float, U: Unit<F>> Clone for Angle<F, U> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self(self.0, PhantomData)
+    }
+}
+impl<F: Float, U: Unit<F>> Copy for Angle<F, U> {}
+
+impl<F: Float, U: Unit<F>> PartialEq for Angle<F, U> {
+    #[inline]
+    fn eq(&self, rhs: &Self) -> bool {
+        self.0 == rhs.0
+    }
+}
+impl<F: Float, U: Unit<F>> PartialOrd for Angle<F, U> {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Angle<F, U> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Angle<F, U> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        U::display(self.0, f)
+    }
+}
+
+impl<F: Float, U: Unit<F>> Angle<F, U> {
     /// Zero angle, additive identity.
-    pub const ZERO: Self = Self(F::ZERO);
-    /// Quarter turn around a circle. Equal to π/2.
-    pub const QUARTER_TURN: Self = Self(F::PI_OVER_TWO);
-    /// Half turn around a circle. Equal to π.
-    pub const HALF_TURN: Self = Self(F::PI);
-    /// Full turn around a circle. Equal to 2π.
-    pub const FULL_TURN: Self = Self(F::TAU);
+    pub const ZERO: Self = Self(F::ZERO, PhantomData);
+    /// Quarter turn around a circle. Equal to π/2 radians or 90°.
+    pub const QUARTER_TURN: Self = Self(U::QUARTER_TURN, PhantomData);
+    /// Half turn around a circle. Equal to π radians or 180°.
+    pub const HALF_TURN: Self = Self(U::HALF_TURN, PhantomData);
+    /// Full turn around a circle. Equal to 2π radians or 360°.
+    pub const FULL_TURN: Self = Self(U::FULL_TURN, PhantomData);
 
-    /// Creates a new angle in radians.
+    /// Create a new angle from a raw value.
     /// # Panics
     /// If the value is non-finite (debug mode).
     #[inline]
     pub fn new(val: F) -> Self {
         debug_assert!(val.is_finite());
-        Self(val)
+        Self(val, PhantomData)
     }
 
-    /// Gets the value of this angle in radians.
+    /// Gets the value of this angle.
     #[inline]
-    pub fn val(self) -> F {
+    pub fn val_raw(self) -> F {
         self.0
     }
-    /// Wraps this angle between -π and +π.
     #[inline]
-    pub fn wrap(self) -> Wrap<F> {
+    pub fn wrap(self) -> Wrap<F, U> {
         Wrap::wrap(self.0)
     }
-    /// Returns the magnitude (absolute value) of this angle in radians.
+    /// Returns the magnitude (absolute value) of this angle.
     #[inline]
     pub fn mag(self) -> F {
         self.0.abs()
     }
 }
 
-impl<F: Float> ops::Add for Rad<F> {
+impl<F: Float, U: Unit<F>> ops::Add for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn add(self, rhs: Self) -> Self {
         Self::new(self.0 + rhs.0)
     }
 }
-impl<F: Float + ops::AddAssign> ops::AddAssign for Rad<F> {
+impl<F: Float + ops::AddAssign, U: Unit<F>> ops::AddAssign for Angle<F, U> {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         self.0 += rhs.0;
         debug_assert!(self.0.is_finite());
     }
 }
-impl<F: Float> ops::Sub for Rad<F> {
+impl<F: Float, U: Unit<F>> ops::Sub for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: Self) -> Self {
         Self::new(self.0 - rhs.0)
     }
 }
-impl<F: Float + ops::SubAssign> ops::SubAssign for Rad<F> {
+impl<F: Float + ops::SubAssign, U: Unit<F>> ops::SubAssign for Angle<F, U> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         self.0 -= rhs.0;
         debug_assert!(self.0.is_finite());
     }
 }
-impl<F: Float> ops::Neg for Rad<F> {
+impl<F: Float, U: Unit<F>> ops::Neg for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn neg(self) -> Self {
-        Self(-self.0)
+        Self(-self.0, PhantomData)
     }
 }
 
-impl<F: Float> ops::Mul<F> for Rad<F> {
+impl<F: Float, U: Unit<F>> ops::Mul<F> for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: F) -> Self {
         Self::new(self.0 * rhs)
     }
 }
-impl<F: Float + ops::MulAssign> ops::MulAssign<F> for Rad<F> {
+impl<F: Float + ops::MulAssign, U: Unit<F>> ops::MulAssign<F> for Angle<F, U> {
     #[inline]
     fn mul_assign(&mut self, rhs: F) {
         self.0 *= rhs;
         debug_assert!(self.0.is_finite());
     }
 }
-impl<F: Float> ops::Div<F> for Rad<F> {
+impl<F: Float, U: Unit<F>> ops::Div<F> for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn div(self, rhs: F) -> Self {
         Self::new(self.0 / rhs)
     }
 }
-impl<F: Float + ops::DivAssign> ops::DivAssign<F> for Rad<F> {
+impl<F: Float + ops::DivAssign, U: Unit<F>> ops::DivAssign<F> for Angle<F, U> {
     #[inline]
     fn div_assign(&mut self, rhs: F) {
         self.0 /= rhs;
@@ -140,130 +198,258 @@ impl<F: Float + ops::DivAssign> ops::DivAssign<F> for Rad<F> {
     }
 }
 
-impl<F: Float + fmt::Debug> fmt::Debug for Rad<F> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
+pub struct Radians;
+impl<F: Float> Unit<F> for Radians {
+    const QUARTER_TURN: F = F::PI_OVER_TWO;
+    const HALF_TURN: F = F::PI;
+    const FULL_TURN: F = F::TAU;
+
+    fn display(val: F, f: &mut fmt::Formatter) -> fmt::Result
+    where
+        F: fmt::Display,
+    {
+        if val.is_sign_negative() {
+            write!(f, "-")?;
+        } else if f.sign_plus() {
+            write!(f, "+")?;
+        }
+        let val = val.abs();
+        if val == F::ZERO {
+            if let Some(prec) = f.precision() {
+                write!(f, "0.{:0<prec$}", 0)
+            } else {
+                write!(f, "0")
+            }
+        } else {
+            if let Some(prec) = f.precision() {
+                write!(f, "{:.prec$}π", val / F::PI)
+            } else {
+                write!(f, "{}π", val / F::PI)
+            }
+        }
     }
 }
-impl<F: Float + fmt::Display> fmt::Display for Rad<F> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.0 == F::ZERO {
-            write!(f, "0")
-        } else {
-            write!(f, "{}π", self.val() / F::PI)
+
+/// An angle measured in radians.
+pub type Rad<F> = Angle<F, Radians>;
+
+impl<F: Float> Rad<F> {
+    /// Gets the value of this angle in radians.
+    #[inline]
+    pub fn val(self) -> F {
+        self.0
+    }
+    /// Converts this angle to degrees.
+    pub fn deg(self) -> Deg<F> {
+        Deg::new(self.0 * (F::ONE_EIGHTY / F::PI))
+    }
+}
+
+pub struct Degrees;
+impl<F: Float> Unit<F> for Degrees {
+    const QUARTER_TURN: F = F::NINETY;
+    const HALF_TURN: F = F::ONE_EIGHTY;
+    const FULL_TURN: F = F::THREE_SIXTY;
+
+    fn display(val: F, f: &mut fmt::Formatter) -> fmt::Result
+    where
+        F: fmt::Display,
+    {
+        let deg_frac = val.abs();
+        let deg = deg_frac.trunc();
+
+        let min_frac = (deg_frac - deg) * F::SIXTY;
+        let min = min_frac.trunc();
+
+        let sec_frac = (min_frac - min) * F::SIXTY;
+
+        if val.is_sign_negative() {
+            write!(f, "-")?;
+        } else if f.sign_plus() {
+            write!(f, "+")?;
         }
+        write!(f, "{deg}°{min}'")?;
+        if let Some(prec) = f.precision() {
+            write!(f, "{sec_frac:.prec$}''")?;
+        } else {
+            write!(f, "{sec_frac}''")?;
+        }
+
+        Ok(())
+    }
+}
+
+/// An angle measured in degrees.
+pub type Deg<F> = Angle<F, Degrees>;
+
+impl<F: Float> Deg<F> {
+    /// Gets the value of this angle in degrees.
+    #[inline]
+    pub fn val(self) -> F {
+        self.0
+    }
+    pub fn rad(self) -> Rad<F> {
+        Rad::new(self.0 * (F::PI / F::ONE_EIGHTY))
     }
 }
 
 /// An angle that wraps between a negative half turn and a positive half turn.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Wrap<F: Float>(Rad<F>);
+pub struct Wrap<F: Float, U: Unit<F>>(Angle<F, U>);
 
-impl<F: Float> Wrap<F> {
-    /// Zero angle, additive identity.
-    pub const ZERO: Self = Self(Rad::ZERO);
-    /// Half turn around a circle. Equal to π/2.
-    pub const QUARTER_TURN: Self = Self(Rad::QUARTER_TURN);
-    /// Half turn around a circle. Equal to π.
-    pub const HALF_TURN: Self = Self(Rad::HALF_TURN);
-    /// Full turn around a circle. Equal to 2π;
-    pub const FULL_TURN: Rad<F> = Rad::FULL_TURN;
-
-    /// Creates a new angle in radians, wrapping between -π and +π.
-    pub fn wrap(val: F) -> Self {
-        let val = (-val + F::PI).rem_euclid(F::TAU) - F::PI;
-        Self(Rad::new(-val))
-    }
-
-    /// Gets the value of this angle in radians.
+impl<F: Float, U: Unit<F>> Clone for Wrap<F, U> {
     #[inline]
-    pub fn val(self) -> F {
-        self.0.val()
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+impl<F: Float, U: Unit<F>> Copy for Wrap<F, U> {}
+impl<F: Float, U: Unit<F>> PartialEq for Wrap<F, U> {
+    #[inline]
+    fn eq(&self, rhs: &Self) -> bool {
+        self.0 .0 == rhs.0 .0
+    }
+}
+impl<F: Float, U: Unit<F>> PartialOrd for Wrap<F, U> {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0 .0.partial_cmp(&other.0 .0)
     }
 }
 
-impl<F: Float> From<Wrap<F>> for Rad<F> {
+impl<F: Float, U: Unit<F>> Wrap<F, U> {
+    /// Zero angle, additive identity.
+    pub const ZERO: Self = Self(Angle::ZERO);
+    /// Half turn around a circle. Equal to π/2 radians or 90°.
+    pub const QUARTER_TURN: Self = Self(Angle::QUARTER_TURN);
+    /// Half turn around a circle. Equal to π radians or 180°.
+    pub const HALF_TURN: Self = Self(Angle::HALF_TURN);
+    /// Full turn around a circle. Equal to 2π radians or 360°;
+    pub const FULL_TURN: Angle<F, U> = Angle::FULL_TURN;
+
+    /// Creates a new angle, wrapping between a negative half turn and a positive half turn.
+    pub fn wrap(val: F) -> Self {
+        let val = (-val + U::HALF_TURN).rem_euclid(U::FULL_TURN) - U::HALF_TURN;
+        Self(Angle::new(-val))
+    }
+
+    /// Gets the value of this angle.
     #[inline]
-    fn from(val: Wrap<F>) -> Self {
+    pub fn val_raw(self) -> F {
+        self.0 .0
+    }
+}
+
+impl<F: Float> Wrap<F, Radians> {
+    /// Gets the value of this angle in radians.
+    #[inline]
+    pub fn val(self) -> F {
+        self.0 .0
+    }
+}
+impl<F: Float> Wrap<F, Degrees> {
+    /// Gets the value of this angle in degrees.
+    #[inline]
+    pub fn val(self) -> F {
+        self.0 .0
+    }
+}
+
+impl<F: Float, U: Unit<F>> From<Wrap<F, U>> for Angle<F, U> {
+    #[inline]
+    fn from(val: Wrap<F, U>) -> Self {
         val.0
     }
 }
 
-impl<F: Float, Rhs: Into<Rad<F>>> ops::Add<Rhs> for Wrap<F> {
+impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> ops::Add<Rhs> for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn add(self, rhs: Rhs) -> Self {
-        Self::wrap(self.val() + rhs.into().val())
+        Self::wrap(self.val_raw() + rhs.into().0)
     }
 }
-impl<F: Float, Rhs: Into<Rad<F>>> ops::AddAssign<Rhs> for Wrap<F> {
+impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> ops::AddAssign<Rhs> for Wrap<F, U> {
     #[inline]
     fn add_assign(&mut self, rhs: Rhs) {
         *self = *self + rhs
     }
 }
-impl<F: Float, Rhs: Into<Rad<F>>> ops::Sub<Rhs> for Wrap<F> {
+impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> ops::Sub<Rhs> for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: Rhs) -> Self {
-        Self::wrap(self.val() + rhs.into().val())
+        Self::wrap(self.val_raw() + rhs.into().0)
     }
 }
-impl<F: Float, Rhs: Into<Rad<F>>> ops::SubAssign<Rhs> for Wrap<F> {
+impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> ops::SubAssign<Rhs> for Wrap<F, U> {
     #[inline]
     fn sub_assign(&mut self, rhs: Rhs) {
         *self = *self - rhs;
     }
 }
-impl<F: Float> ops::Neg for Wrap<F> {
+impl<F: Float, U: Unit<F>> ops::Neg for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn neg(self) -> Self {
-        Self::wrap(-self.val())
+        Self::wrap(-self.val_raw())
     }
 }
 
-impl<F: Float> ops::Mul<F> for Wrap<F> {
+impl<F: Float, U: Unit<F>> ops::Mul<F> for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: F) -> Self {
-        Self::wrap(self.val() * rhs)
+        Self::wrap(self.val_raw() * rhs)
     }
 }
-impl<F: Float> ops::MulAssign<F> for Wrap<F> {
+impl<F: Float, U: Unit<F>> ops::MulAssign<F> for Wrap<F, U> {
     #[inline]
     fn mul_assign(&mut self, rhs: F) {
         *self = *self * rhs;
     }
 }
-impl<F: Float> ops::Div<F> for Wrap<F> {
+impl<F: Float, U: Unit<F>> ops::Div<F> for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn div(self, rhs: F) -> Self {
-        Self::wrap(self.val() / rhs)
+        Self::wrap(self.val_raw() / rhs)
     }
 }
-impl<F: Float> ops::DivAssign<F> for Wrap<F> {
+impl<F: Float, U: Unit<F>> ops::DivAssign<F> for Wrap<F, U> {
     #[inline]
     fn div_assign(&mut self, rhs: F) {
         *self = *self / rhs
     }
 }
 
-impl<F: Float + fmt::Display> fmt::Display for Wrap<F> {
+impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Wrap<F, U> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Wrap<F, U> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
     }
 }
 
+/// A 32-bit angle measured in radians.
 pub type Rad32 = Rad<f32>;
+/// A 64-bit angle measured in radians.
 pub type Rad64 = Rad<f64>;
 
-pub type Wrap32 = Wrap<f32>;
-pub type Wrap64 = Wrap<f64>;
+/// A 32-bit angle measured in degrees.
+pub type Deg32 = Deg<f32>;
+/// A 64-bit angle measured in degrees.
+pub type Deg64 = Deg<f64>;
+
+/// A 32-bit angle measured in radians that wraps between -π and +π.
+pub type Wrap32 = Wrap<f32, Radians>;
+/// A 64-bit angle measured in radians that wraps between -π and +π.
+pub type Wrap64 = Wrap<f64, Radians>;
 
 #[cfg(test)]
 mod tests {
@@ -330,6 +516,12 @@ mod tests {
     }
 
     #[test]
+    fn convert() {
+        assert_eq!(Rad64::HALF_TURN.deg(), Deg64::HALF_TURN);
+        assert_eq!(Deg64::QUARTER_TURN.rad(), Rad64::QUARTER_TURN);
+    }
+
+    #[test]
     fn wrap() {
         let wrap = Rad64::HALF_TURN.wrap();
         assert_epsilon!(wrap.val(), PI);
@@ -389,5 +581,30 @@ mod tests {
         let mut val = Wrap64::QUARTER_TURN;
         val /= 2.0;
         assert_epsilon!(val.val(), PI / 4.0);
+    }
+
+    #[test]
+    fn display() {
+        assert_eq!(format!("{}", Rad64::ZERO), "0");
+        assert_eq!(format!("{:.4}", Rad64::ZERO), "0.0000");
+        assert_eq!(format!("{}", Rad64::QUARTER_TURN), "0.5π");
+        assert_eq!(format!("{:+.3}", Rad64::QUARTER_TURN), "+0.500π");
+        assert_eq!(format!("{:.2}", -Rad64::HALF_TURN), "-1.00π");
+
+        assert_eq!(format!("{}", Deg64::ZERO), "0°0'0''");
+        assert_eq!(
+            format!(
+                "{:+.3}",
+                Deg64::new(180.0 + 44.0 / 60.0 + 12.4567 / 60.0 / 60.0)
+            ),
+            "+180°44'12.457''"
+        );
+        assert_eq!(
+            format!(
+                "{:.2}",
+                Deg64::new(-90.0 - 15.0 / 60.0 - 0.123 / 60.0 / 60.0)
+            ),
+            "-90°15'0.12''"
+        );
     }
 }
