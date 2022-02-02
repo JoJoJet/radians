@@ -1,3 +1,10 @@
+//! A crate for storing angles.
+//!
+//! Exports the types [`Rad32`] and [`Rad64`] for dealing with angles in radians,
+//! as well as [`Wrap32`] and [`Wrap64`] for angles that automatically wrap around -π and +π.
+//!
+//! Supports custom formatting in terms of degrees, minutes, and seconds, via the `Rad{32, 64}`.deg() method.
+
 use std::{fmt, marker::PhantomData, ops};
 
 /// A floating-point number that serves as the backing value of an [`Angle`].
@@ -231,6 +238,8 @@ impl<F: Float> Unit<F> for Radians {
 }
 
 /// An angle measured in radians.
+///
+/// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
 pub type Rad<F> = Angle<F, Radians>;
 
 impl<F: Float> Rad<F> {
@@ -437,8 +446,12 @@ impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Wrap<F, U> {
 }
 
 /// A 32-bit angle measured in radians.
+///
+/// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
 pub type Rad32 = Rad<f32>;
 /// A 64-bit angle measured in radians.
+///
+/// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
 pub type Rad64 = Rad<f64>;
 
 /// A 32-bit angle measured in degrees.
