@@ -71,6 +71,12 @@ pub trait Unit<F: Float>: Sized {
 #[repr(transparent)]
 pub struct Angle<F: Float, U: Unit<F>>(F, PhantomData<U>);
 
+impl<F: Float, U: Unit<F>> Default for Angle<F, U> {
+    #[inline]
+    fn default() -> Self {
+        Self(F::ZERO, PhantomData)
+    }
+}
 impl<F: Float, U: Unit<F>> Clone for Angle<F, U> {
     #[inline]
     fn clone(&self) -> Self {
@@ -306,6 +312,12 @@ impl<F: Float> Deg<F> {
 #[repr(transparent)]
 pub struct Wrap<F: Float, U: Unit<F>>(Angle<F, U>);
 
+impl<F: Float, U: Unit<F>> Default for Wrap<F, U> {
+    #[inline]
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<F: Float, U: Unit<F>> Clone for Wrap<F, U> {
     #[inline]
     fn clone(&self) -> Self {
