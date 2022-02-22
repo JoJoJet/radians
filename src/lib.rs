@@ -176,8 +176,9 @@ impl<F: Float, U: Unit<F>> Angle<F, U> {
     }
     /// Returns the magnitude (absolute value) of this angle.
     #[inline]
-    pub fn mag(self) -> F {
-        self.0.abs()
+    pub fn mag(mut self) -> Self {
+        self.0 = self.0.abs();
+        self
     }
 }
 
@@ -367,18 +368,6 @@ impl<F: Float, U: Unit<F>> PartialEq for Wrap<F, U> {
     }
 }
 impl<F: Float, U: Unit<F>> Eq for Wrap<F, U> {}
-impl<F: Float, U: Unit<F>> PartialOrd for Wrap<F, U> {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-impl<F: Float, U: Unit<F>> Ord for Wrap<F, U> {
-    #[inline]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 impl<F: Float, U: Unit<F>> Wrap<F, U> {
     /// Zero angle, additive identity.
@@ -400,6 +389,16 @@ impl<F: Float, U: Unit<F>> Wrap<F, U> {
     #[inline]
     pub fn val_raw(self) -> F {
         self.0 .0
+    }
+    /// Gets the inner representation of this angle.
+    #[inline]
+    pub fn inner(self) -> Angle<F, U> {
+        self.0
+    }
+    /// Returns the magnitude (absolute value) of this angle.
+    #[inline]
+    pub fn mag(self) -> Angle<F, U> {
+        self.0.mag()
     }
 }
 
@@ -522,8 +521,16 @@ pub type Deg32 = Deg<f32>;
 pub type Deg64 = Deg<f64>;
 
 /// A 32-bit angle measured in radians that wraps between -π and +π.
+///
+/// This type is guaranteed to be finite (in debug mode). As such, it implements total equality.  
+/// It intentionally does not implement any ordering, as the wrapping behavior of this type may
+/// cause unexpected ordering. If you need ordering, use the method `inner` or `mag`.
 pub type Wrap32 = Wrap<f32, Radians>;
 /// A 64-bit angle measured in radians that wraps between -π and +π.
+///
+/// This type is guaranteed to be finite (in debug mode). As such, it implements total equality.  
+/// It intentionally does not implement any ordering, as the wrapping behavior of this type may
+/// cause unexpected ordering. If you need ordering, use the method `inner` or `mag`.
 pub type Wrap64 = Wrap<f64, Radians>;
 
 #[cfg(test)]
