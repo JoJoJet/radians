@@ -28,10 +28,18 @@ pub trait Float: num_traits::Float {
 
     /// Modulus operation.
     fn rem_euclid(self, _: Self) -> Self;
+
+    /// Type that implements [`std::cmp::Ord`], which this floating point type can be trivially converted to.
+    type Ord: Ord;
+    /// Converts this floating point number to a type that implements total ordering. Conversion should be trivial.  
+    ///
+    /// For insight on how to implement this, check out the README of https://github.com/notriddle/rust-float-ord.
+    /// Note that the implementation in that crate is slightly incorrect, as it will make 0.0 != -0.0
+    fn to_ord(self) -> Self::Ord;
 }
 
 macro_rules! impl_float {
-    ($f: ident) => {
+    ($f: ident, $i: ty) => {
         impl Float for $f {
             const ZERO: $f = 0.0;
             const PI: $f = std::$f::consts::PI;
@@ -46,12 +54,32 @@ macro_rules! impl_float {
             fn rem_euclid(self, rhs: Self) -> Self {
                 <$f>::rem_euclid(self, rhs)
             }
+
+            type Ord = $i;
+            #[inline]
+            fn to_ord(self) -> Self::Ord {
+                // assert that the types have equal sizes.
+                const _ASSERT: [(); std::mem::size_of::<$f>()] = [(); std::mem::size_of::<$i>()];
+
+                const MSB: $i = 1 << (std::mem::size_of::<$f>() * 8 - 1);
+                let bits = self.to_bits();
+                if bits & !MSB == 0 {
+                    // if it's -0 or +0, set the most significant bit to `1`.
+                    MSB
+                } else if bits & MSB == 0 {
+                    // if it's positive, flip the most significant bit.
+                    bits | MSB
+                } else {
+                    // if it's negative, flip every bit.
+                    !bits
+                }
+            }
         }
     };
 }
 
-impl_float!(f32);
-impl_float!(f64);
+impl_float!(f32, u32);
+impl_float!(f64, u64);
 
 /// A unit of measurement for an [`Angle`].
 pub trait Unit<F: Float>: Sized {
@@ -88,13 +116,20 @@ impl<F: Float, U: Unit<F>> Copy for Angle<F, U> {}
 impl<F: Float, U: Unit<F>> PartialEq for Angle<F, U> {
     #[inline]
     fn eq(&self, rhs: &Self) -> bool {
-        self.0 == rhs.0
+        self.0.to_ord() == rhs.0.to_ord()
     }
 }
+impl<F: Float, U: Unit<F>> Eq for Angle<F, U> {}
 impl<F: Float, U: Unit<F>> PartialOrd for Angle<F, U> {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
+        Some(self.cmp(other))
+    }
+}
+impl<F: Float, U: Unit<F>> Ord for Angle<F, U> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.to_ord().cmp(&other.0.to_ord())
     }
 }
 
@@ -328,13 +363,20 @@ impl<F: Float, U: Unit<F>> Copy for Wrap<F, U> {}
 impl<F: Float, U: Unit<F>> PartialEq for Wrap<F, U> {
     #[inline]
     fn eq(&self, rhs: &Self) -> bool {
-        self.0 .0 == rhs.0 .0
+        self.0 == rhs.0
     }
 }
+impl<F: Float, U: Unit<F>> Eq for Wrap<F, U> {}
 impl<F: Float, U: Unit<F>> PartialOrd for Wrap<F, U> {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0 .0.partial_cmp(&other.0 .0)
+        self.0.partial_cmp(&other.0)
+    }
+}
+impl<F: Float, U: Unit<F>> Ord for Wrap<F, U> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
     }
 }
 
@@ -459,16 +501,24 @@ impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Wrap<F, U> {
 
 /// A 32-bit angle measured in radians.
 ///
+/// This type is guaranteed to be finite (in debug mode). As such, it implements total equality and ordering.
+///
 /// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
 pub type Rad32 = Rad<f32>;
 /// A 64-bit angle measured in radians.
+///
+/// This type is guaranteed to be finite (in debug mode). As such, it implements total equality and ordering.
 ///
 /// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
 pub type Rad64 = Rad<f64>;
 
 /// A 32-bit angle measured in degrees.
+///
+/// This type is guaranteed to be finite (in debug mode). As such, it implements total equality and ordering.
 pub type Deg32 = Deg<f32>;
 /// A 64-bit angle measured in degrees.
+///
+/// This type is guaranteed to be finite (in debug mode). As such, it implements total equality and ordering.
 pub type Deg64 = Deg<f64>;
 
 /// A 32-bit angle measured in radians that wraps between -π and +π.
@@ -504,6 +554,21 @@ mod tests {
         assert_epsilon!(Wrap64::QUARTER_TURN.val(), PI / 2.0);
         assert_epsilon!(Wrap64::HALF_TURN.val(), PI);
         assert_epsilon!(Wrap64::FULL_TURN.val(), 2.0 * PI);
+    }
+
+    #[test]
+    fn ord() {
+        assert!(-Rad64::FULL_TURN < -Rad64::QUARTER_TURN);
+        assert!(-Rad64::QUARTER_TURN < -Rad64::ZERO);
+        assert!(-Rad64::ZERO == Rad64::ZERO);
+        assert!(Rad64::ZERO < Rad64::QUARTER_TURN);
+        assert!(Rad64::QUARTER_TURN < Rad64::FULL_TURN);
+
+        assert!(Rad64::FULL_TURN > Rad64::QUARTER_TURN);
+        assert!(Rad64::QUARTER_TURN > Rad64::ZERO);
+        assert!(Rad64::ZERO == -Rad64::ZERO);
+        assert!(-Rad64::ZERO > -Rad64::QUARTER_TURN);
+        assert!(-Rad64::QUARTER_TURN > -Rad64::FULL_TURN);
     }
 
     #[test]
