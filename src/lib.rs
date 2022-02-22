@@ -26,6 +26,11 @@ pub trait Float: num_traits::Float {
     /// The number 360.
     const THREE_SIXTY: Self;
 
+    /// Minimum finite value.
+    const MIN: Self;
+    /// Maximum finite value.
+    const MAX: Self;
+
     /// Modulus operation.
     fn rem_euclid(self, _: Self) -> Self;
 
@@ -49,6 +54,8 @@ macro_rules! impl_float {
             const NINETY: $f = 90.0;
             const ONE_EIGHTY: $f = 180.0;
             const THREE_SIXTY: $f = 360.0;
+            const MIN: $f = $f::MIN;
+            const MAX: $f = $f::MAX;
 
             #[inline]
             fn rem_euclid(self, rhs: Self) -> Self {
@@ -155,6 +162,10 @@ impl<F: Float, U: Unit<F>> Angle<F, U> {
     pub const HALF_TURN: Self = Self(U::HALF_TURN, PhantomData);
     /// Full turn around a circle. Equal to 2π radians or 360°.
     pub const FULL_TURN: Self = Self(U::FULL_TURN, PhantomData);
+    /// Minimum finite angle.
+    pub const MIN: Self = Self(F::MIN, PhantomData);
+    /// Maximum finite angle.
+    pub const MAX: Self = Self(F::MAX, PhantomData);
 
     /// Create a new angle from a raw value.
     /// # Panics
@@ -565,17 +576,21 @@ mod tests {
 
     #[test]
     fn ord() {
+        assert!(Rad64::MIN < -Rad64::FULL_TURN);
         assert!(-Rad64::FULL_TURN < -Rad64::QUARTER_TURN);
         assert!(-Rad64::QUARTER_TURN < -Rad64::ZERO);
         assert!(-Rad64::ZERO == Rad64::ZERO);
         assert!(Rad64::ZERO < Rad64::QUARTER_TURN);
         assert!(Rad64::QUARTER_TURN < Rad64::FULL_TURN);
+        assert!(Rad64::FULL_TURN < Rad64::MAX);
 
+        assert!(Rad64::MAX > Rad64::FULL_TURN);
         assert!(Rad64::FULL_TURN > Rad64::QUARTER_TURN);
         assert!(Rad64::QUARTER_TURN > Rad64::ZERO);
         assert!(Rad64::ZERO == -Rad64::ZERO);
         assert!(-Rad64::ZERO > -Rad64::QUARTER_TURN);
         assert!(-Rad64::QUARTER_TURN > -Rad64::FULL_TURN);
+        assert!(-Rad64::FULL_TURN > Rad64::MIN);
     }
 
     #[test]
