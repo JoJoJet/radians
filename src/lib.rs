@@ -70,15 +70,25 @@ macro_rules! impl_float {
 
                 const MSB: $i = 1 << (std::mem::size_of::<$f>() * 8 - 1);
                 let bits = self.to_bits();
-                if bits & !MSB == 0 {
-                    // if it's -0 or +0, set the most significant bit to `1`.
-                    MSB
-                } else if bits & MSB == 0 {
+                if bits & MSB == 0 {
                     // if it's positive, flip the most significant bit.
                     bits | MSB
                 } else {
-                    // if it's negative, flip every bit.
-                    !bits
+                    // if its negative zero, pretend that its positive zero.
+                    if bits << 1 == 0 {
+                        return zero();
+
+                        // Benchmarking shows that marking as cold provides a slight performance boost.
+                        // This is because -0 is a special case.
+                        #[cold]
+                        fn zero() -> $i {
+                            MSB // this is the result of flipping the most significant bit of +0
+                        }
+                    }
+                    // if it's any other negative number, flip every bit
+                    else {
+                        !bits
+                    }
                 }
             }
         }
