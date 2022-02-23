@@ -5,10 +5,26 @@
 //!
 //! Supports custom formatting in terms of degrees, minutes, and seconds, via the `Rad{32, 64}`.deg() method.
 
-use std::{fmt, marker::PhantomData, ops};
+use std::{
+    fmt,
+    marker::PhantomData,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 
 /// A floating-point number that serves as the backing value of an [`Angle`].
-pub trait Float: num_traits::Float {
+pub trait Float:
+    Copy
+    + PartialEq
+    + Add<Output = Self>
+    + AddAssign
+    + Sub<Output = Self>
+    + SubAssign
+    + Neg<Output = Self>
+    + Mul<Output = Self>
+    + MulAssign
+    + Div<Output = Self>
+    + DivAssign
+{
     /// Additive identity, 0.
     const ZERO: Self;
     /// Archimedes’ constant (π)
@@ -31,8 +47,19 @@ pub trait Float: num_traits::Float {
     /// Maximum finite value.
     const MAX: Self;
 
+    /// Returns whether this value is finite (not infinity, not NaN).
+    fn is_finite(self) -> bool;
+    fn is_sign_positive(self) -> bool;
+    #[inline]
+    fn is_sign_negative(self) -> bool {
+        !self.is_sign_positive()
+    }
     /// Modulus operation.
     fn rem_euclid(self, _: Self) -> Self;
+    /// Absolute value.
+    fn abs(self) -> Self;
+    /// Truncates the fractional part from this value.
+    fn trunc(self) -> Self;
 
     /// Type that implements [`std::cmp::Ord`], which this floating point type can be trivially converted to.
     type Ord: Ord;
@@ -58,8 +85,28 @@ macro_rules! impl_float {
             const MAX: $f = $f::MAX;
 
             #[inline]
+            fn is_finite(self) -> bool {
+                <$f>::is_finite(self)
+            }
+            #[inline]
+            fn is_sign_positive(self) -> bool {
+                <$f>::is_sign_positive(self)
+            }
+            #[inline]
+            fn is_sign_negative(self) -> bool {
+                <$f>::is_sign_negative(self)
+            }
+            #[inline]
             fn rem_euclid(self, rhs: Self) -> Self {
                 <$f>::rem_euclid(self, rhs)
+            }
+            #[inline]
+            fn abs(self) -> Self {
+                <$f>::abs(self)
+            }
+            #[inline]
+            fn trunc(self) -> Self {
+                <$f>::trunc(self)
             }
 
             type Ord = $i;
@@ -203,35 +250,35 @@ impl<F: Float, U: Unit<F>> Angle<F, U> {
     }
 }
 
-impl<F: Float, U: Unit<F>> ops::Add for Angle<F, U> {
+impl<F: Float, U: Unit<F>> Add for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn add(self, rhs: Self) -> Self {
         Self::new(self.0 + rhs.0)
     }
 }
-impl<F: Float + ops::AddAssign, U: Unit<F>> ops::AddAssign for Angle<F, U> {
+impl<F: Float, U: Unit<F>> AddAssign for Angle<F, U> {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         self.0 += rhs.0;
         debug_assert!(self.0.is_finite());
     }
 }
-impl<F: Float, U: Unit<F>> ops::Sub for Angle<F, U> {
+impl<F: Float, U: Unit<F>> Sub for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: Self) -> Self {
         Self::new(self.0 - rhs.0)
     }
 }
-impl<F: Float + ops::SubAssign, U: Unit<F>> ops::SubAssign for Angle<F, U> {
+impl<F: Float, U: Unit<F>> SubAssign for Angle<F, U> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         self.0 -= rhs.0;
         debug_assert!(self.0.is_finite());
     }
 }
-impl<F: Float, U: Unit<F>> ops::Neg for Angle<F, U> {
+impl<F: Float, U: Unit<F>> Neg for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn neg(self) -> Self {
@@ -239,28 +286,28 @@ impl<F: Float, U: Unit<F>> ops::Neg for Angle<F, U> {
     }
 }
 
-impl<F: Float, U: Unit<F>> ops::Mul<F> for Angle<F, U> {
+impl<F: Float, U: Unit<F>> Mul<F> for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: F) -> Self {
         Self::new(self.0 * rhs)
     }
 }
-impl<F: Float + ops::MulAssign, U: Unit<F>> ops::MulAssign<F> for Angle<F, U> {
+impl<F: Float, U: Unit<F>> MulAssign<F> for Angle<F, U> {
     #[inline]
     fn mul_assign(&mut self, rhs: F) {
         self.0 *= rhs;
         debug_assert!(self.0.is_finite());
     }
 }
-impl<F: Float, U: Unit<F>> ops::Div<F> for Angle<F, U> {
+impl<F: Float, U: Unit<F>> Div<F> for Angle<F, U> {
     type Output = Self;
     #[inline]
     fn div(self, rhs: F) -> Self {
         Self::new(self.0 / rhs)
     }
 }
-impl<F: Float + ops::DivAssign, U: Unit<F>> ops::DivAssign<F> for Angle<F, U> {
+impl<F: Float, U: Unit<F>> DivAssign<F> for Angle<F, U> {
     #[inline]
     fn div_assign(&mut self, rhs: F) {
         self.0 /= rhs;
@@ -445,33 +492,33 @@ impl<F: Float, U: Unit<F>> From<Wrap<F, U>> for Angle<F, U> {
     }
 }
 
-impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> ops::Add<Rhs> for Wrap<F, U> {
+impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> Add<Rhs> for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn add(self, rhs: Rhs) -> Self {
         Self::wrap(self.val_raw() + rhs.into().0)
     }
 }
-impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> ops::AddAssign<Rhs> for Wrap<F, U> {
+impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> AddAssign<Rhs> for Wrap<F, U> {
     #[inline]
     fn add_assign(&mut self, rhs: Rhs) {
         *self = *self + rhs
     }
 }
-impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> ops::Sub<Rhs> for Wrap<F, U> {
+impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> Sub<Rhs> for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: Rhs) -> Self {
         Self::wrap(self.val_raw() + rhs.into().0)
     }
 }
-impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> ops::SubAssign<Rhs> for Wrap<F, U> {
+impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> SubAssign<Rhs> for Wrap<F, U> {
     #[inline]
     fn sub_assign(&mut self, rhs: Rhs) {
         *self = *self - rhs;
     }
 }
-impl<F: Float, U: Unit<F>> ops::Neg for Wrap<F, U> {
+impl<F: Float, U: Unit<F>> Neg for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn neg(self) -> Self {
@@ -479,27 +526,27 @@ impl<F: Float, U: Unit<F>> ops::Neg for Wrap<F, U> {
     }
 }
 
-impl<F: Float, U: Unit<F>> ops::Mul<F> for Wrap<F, U> {
+impl<F: Float, U: Unit<F>> Mul<F> for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn mul(self, rhs: F) -> Self {
         Self::wrap(self.val_raw() * rhs)
     }
 }
-impl<F: Float, U: Unit<F>> ops::MulAssign<F> for Wrap<F, U> {
+impl<F: Float, U: Unit<F>> MulAssign<F> for Wrap<F, U> {
     #[inline]
     fn mul_assign(&mut self, rhs: F) {
         *self = *self * rhs;
     }
 }
-impl<F: Float, U: Unit<F>> ops::Div<F> for Wrap<F, U> {
+impl<F: Float, U: Unit<F>> Div<F> for Wrap<F, U> {
     type Output = Self;
     #[inline]
     fn div(self, rhs: F) -> Self {
         Self::wrap(self.val_raw() / rhs)
     }
 }
-impl<F: Float, U: Unit<F>> ops::DivAssign<F> for Wrap<F, U> {
+impl<F: Float, U: Unit<F>> DivAssign<F> for Wrap<F, U> {
     #[inline]
     fn div_assign(&mut self, rhs: F) {
         *self = *self / rhs
