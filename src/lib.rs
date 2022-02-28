@@ -207,6 +207,8 @@ impl_float!(f64, u64);
 
 /// A unit of measurement for an [`Angle`].
 pub trait Unit<F: Float>: Sized {
+    const DBG_NAME: &'static str;
+
     /// Number for a quarter turn around a circle in this unit space.
     const QUARTER_TURN: F;
     /// Number for a half turn around a circle in this unit space.
@@ -260,7 +262,7 @@ impl<F: Float, U: Unit<F>> Ord for Angle<F, U> {
 impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Angle<F, U> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
+        f.debug_tuple(U::DBG_NAME).field(&self.0).finish()
     }
 }
 impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Angle<F, U> {
@@ -377,6 +379,8 @@ impl<F: Float, U: Unit<F>> DivAssign<F> for Angle<F, U> {
 
 pub struct Radians;
 impl<F: Float> Unit<F> for Radians {
+    const DBG_NAME: &'static str = "Rad";
+
     const QUARTER_TURN: F = F::PI_OVER_TWO;
     const HALF_TURN: F = F::PI;
     const FULL_TURN: F = F::TAU;
@@ -426,6 +430,8 @@ impl<F: Float> Rad<F> {
 
 pub struct Degrees;
 impl<F: Float> Unit<F> for Degrees {
+    const DBG_NAME: &'static str = "Deg";
+
     const QUARTER_TURN: F = F::NINETY;
     const HALF_TURN: F = F::ONE_EIGHTY;
     const FULL_TURN: F = F::THREE_SIXTY;
@@ -621,7 +627,7 @@ impl<F: Float, U: Unit<F>> DivAssign<F> for Wrap<F, U> {
 impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Wrap<F, U> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
+        f.debug_tuple("Wrap").field(&self.0).finish()
     }
 }
 impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Wrap<F, U> {
