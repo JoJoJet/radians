@@ -225,27 +225,6 @@ pub trait Unit<F: Float>: Sized {
 #[repr(transparent)]
 pub struct Angle<F: Float, U: Unit<F>>(F, PhantomData<U>);
 
-impl<F: Float, U: Unit<F>> Default for Angle<F, U> {
-    #[inline]
-    fn default() -> Self {
-        Self(F::ZERO, PhantomData)
-    }
-}
-impl<F: Float, U: Unit<F>> Clone for Angle<F, U> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
-    }
-}
-impl<F: Float, U: Unit<F>> Copy for Angle<F, U> {}
-
-impl<F: Float, U: Unit<F>> PartialEq for Angle<F, U> {
-    #[inline]
-    fn eq(&self, rhs: &Self) -> bool {
-        self.0.total_eq(rhs.0)
-    }
-}
-impl<F: Float, U: Unit<F>> Eq for Angle<F, U> {}
 impl<F: Float, U: Unit<F>> PartialOrd for Angle<F, U> {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -263,12 +242,6 @@ impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Angle<F, U> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_tuple(U::DBG_NAME).field(&self.0).finish()
-    }
-}
-impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Angle<F, U> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        U::display(self.0, f)
     }
 }
 
@@ -309,71 +282,6 @@ impl<F: Float, U: Unit<F>> Angle<F, U> {
     pub fn mag(mut self) -> Self {
         self.0 = self.0.abs();
         self
-    }
-}
-
-impl<F: Float, U: Unit<F>> Add for Angle<F, U> {
-    type Output = Self;
-    #[inline]
-    fn add(self, rhs: Self) -> Self {
-        Self::new(self.0 + rhs.0)
-    }
-}
-impl<F: Float, U: Unit<F>> AddAssign for Angle<F, U> {
-    #[inline]
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0;
-        debug_assert!(self.0.is_finite());
-    }
-}
-impl<F: Float, U: Unit<F>> Sub for Angle<F, U> {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: Self) -> Self {
-        Self::new(self.0 - rhs.0)
-    }
-}
-impl<F: Float, U: Unit<F>> SubAssign for Angle<F, U> {
-    #[inline]
-    fn sub_assign(&mut self, rhs: Self) {
-        self.0 -= rhs.0;
-        debug_assert!(self.0.is_finite());
-    }
-}
-impl<F: Float, U: Unit<F>> Neg for Angle<F, U> {
-    type Output = Self;
-    #[inline]
-    fn neg(self) -> Self {
-        Self(-self.0, PhantomData)
-    }
-}
-
-impl<F: Float, U: Unit<F>> Mul<F> for Angle<F, U> {
-    type Output = Self;
-    #[inline]
-    fn mul(self, rhs: F) -> Self {
-        Self::new(self.0 * rhs)
-    }
-}
-impl<F: Float, U: Unit<F>> MulAssign<F> for Angle<F, U> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: F) {
-        self.0 *= rhs;
-        debug_assert!(self.0.is_finite());
-    }
-}
-impl<F: Float, U: Unit<F>> Div<F> for Angle<F, U> {
-    type Output = Self;
-    #[inline]
-    fn div(self, rhs: F) -> Self {
-        Self::new(self.0 / rhs)
-    }
-}
-impl<F: Float, U: Unit<F>> DivAssign<F> for Angle<F, U> {
-    #[inline]
-    fn div_assign(&mut self, rhs: F) {
-        self.0 /= rhs;
-        debug_assert!(self.0.is_finite());
     }
 }
 
@@ -482,26 +390,12 @@ impl<F: Float> Deg<F> {
 #[repr(transparent)]
 pub struct Wrap<F: Float, U: Unit<F>>(Angle<F, U>);
 
-impl<F: Float, U: Unit<F>> Default for Wrap<F, U> {
+impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Wrap<F, U> {
     #[inline]
-    fn default() -> Self {
-        Self(Default::default())
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("Wrap").field(&self.0).finish()
     }
 }
-impl<F: Float, U: Unit<F>> Clone for Wrap<F, U> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self(self.0)
-    }
-}
-impl<F: Float, U: Unit<F>> Copy for Wrap<F, U> {}
-impl<F: Float, U: Unit<F>> PartialEq for Wrap<F, U> {
-    #[inline]
-    fn eq(&self, rhs: &Self) -> bool {
-        self.0 == rhs.0
-    }
-}
-impl<F: Float, U: Unit<F>> Eq for Wrap<F, U> {}
 
 impl<F: Float, U: Unit<F>> Wrap<F, U> {
     /// Zero angle, additive identity.
@@ -518,9 +412,9 @@ impl<F: Float, U: Unit<F>> Wrap<F, U> {
         let val = (-val + U::HALF_TURN).rem_euclid(U::FULL_TURN) - U::HALF_TURN;
         Self(Angle::new(-val))
     }
-    /// Creates a new angle, without checking if its in range.
+    /// Creates a new angle, without checking if it's in range.
     #[inline]
-    fn new(val: F) -> Self {
+    fn new_unchecked(val: F) -> Self {
         Self(Angle::new(val))
     }
 
@@ -563,82 +457,119 @@ impl<F: Float, U: Unit<F>> From<Wrap<F, U>> for Angle<F, U> {
     }
 }
 
-impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> Add<Rhs> for Wrap<F, U> {
-    type Output = Self;
-    #[inline]
-    fn add(self, rhs: Rhs) -> Self {
-        Self::wrap(self.val_raw() + rhs.into().0)
-    }
-}
-impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> AddAssign<Rhs> for Wrap<F, U> {
-    #[inline]
-    fn add_assign(&mut self, rhs: Rhs) {
-        *self = *self + rhs
-    }
-}
-impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> Sub<Rhs> for Wrap<F, U> {
-    type Output = Self;
-    #[inline]
-    fn sub(self, rhs: Rhs) -> Self {
-        Self::wrap(self.val_raw() + rhs.into().0)
-    }
-}
-impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> SubAssign<Rhs> for Wrap<F, U> {
-    #[inline]
-    fn sub_assign(&mut self, rhs: Rhs) {
-        *self = *self - rhs;
-    }
-}
-impl<F: Float, U: Unit<F>> Neg for Wrap<F, U> {
-    type Output = Self;
-    #[inline]
-    fn neg(self) -> Self {
-        Self::wrap(-self.val_raw())
+macro_rules! impl_traits {
+    ($ang: ident : $new: ident) => {
+        impl<F: Float, U: Unit<F>> Default for $ang<F, U> {
+            #[inline]
+            fn default() -> Self {
+                Self::$new(F::ZERO)
+            }
+        }
+
+        impl<F: Float, U: Unit<F>> Clone for $ang<F, U> {
+            #[inline]
+            fn clone(&self) -> Self {
+                Self::$new(self.val_raw())
+            }
+        }
+        impl<F: Float, U: Unit<F>> Copy for $ang<F, U> {}
+
+        impl<F: Float, U: Unit<F>> PartialEq for $ang<F, U> {
+            #[inline]
+            fn eq(&self, rhs: &Self) -> bool {
+                self.val_raw().total_eq(rhs.val_raw())
+            }
+        }
+        impl<F: Float, U: Unit<F>> Eq for $ang<F, U> {}
+
+        impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for $ang<F, U> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                U::display(self.val_raw(), f)
+            }
+        }
+    };
+    ($($ang: ident : $new: ident),*) => {
+        $(impl_traits!($ang : $new);)*
     }
 }
 
-impl<F: Float, U: Unit<F>> Mul<F> for Wrap<F, U> {
-    type Output = Self;
-    #[inline]
-    fn mul(self, rhs: F) -> Self {
-        Self::wrap(self.val_raw() * rhs)
-    }
-}
-impl<F: Float, U: Unit<F>> MulAssign<F> for Wrap<F, U> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: F) {
-        *self = *self * rhs;
-    }
-}
-impl<F: Float, U: Unit<F>> Div<F> for Wrap<F, U> {
-    type Output = Self;
-    #[inline]
-    fn div(self, rhs: F) -> Self {
-        Self::wrap(self.val_raw() / rhs)
-    }
-}
-impl<F: Float, U: Unit<F>> DivAssign<F> for Wrap<F, U> {
-    #[inline]
-    fn div_assign(&mut self, rhs: F) {
-        *self = *self / rhs
+impl_traits!(Angle: new, Wrap: new_unchecked);
+
+macro_rules! impl_ops {
+    ($ang: ident : $new: ident) => {
+        impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> Add<Rhs> for $ang<F, U> {
+            type Output = Self;
+            #[inline]
+            fn add(self, rhs: Rhs) -> Self {
+                Self::$new(self.val_raw() + rhs.into().val_raw())
+            }
+        }
+        impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> AddAssign<Rhs> for $ang<F, U> {
+            #[inline]
+            fn add_assign(&mut self, rhs: Rhs) {
+                *self = *self + rhs;
+            }
+        }
+
+        impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> Sub<Rhs> for $ang<F, U> {
+            type Output = Self;
+            #[inline]
+            fn sub(self, rhs: Rhs) -> Self {
+                Self::$new(self.val_raw() - rhs.into().val_raw())
+            }
+        }
+        impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> SubAssign<Rhs> for $ang<F, U> {
+            #[inline]
+            fn sub_assign(&mut self, rhs: Rhs) {
+                *self = *self - rhs;
+            }
+        }
+
+        impl<F: Float, U: Unit<F>> Neg for $ang<F, U> {
+            type Output = Self;
+            #[inline]
+            fn neg(self) -> Self {
+                Self::$new(-self.val_raw())
+            }
+        }
+
+        impl<F: Float, U: Unit<F>> Mul<F> for $ang<F, U> {
+            type Output = Self;
+            #[inline]
+            fn mul(self, rhs: F) -> Self {
+                Self::$new(self.val_raw() * rhs)
+            }
+        }
+        impl<F: Float, U: Unit<F>> MulAssign<F> for $ang<F, U> {
+            #[inline]
+            fn mul_assign(&mut self, rhs: F) {
+                *self = *self * rhs;
+            }
+        }
+
+        impl<F: Float, U: Unit<F>> Div<F> for $ang<F, U> {
+            type Output = Self;
+            #[inline]
+            fn div(self, rhs: F) -> Self {
+                Self::$new(self.val_raw() / rhs)
+            }
+        }
+        impl<F: Float, U: Unit<F>> DivAssign<F> for $ang<F, U> {
+            #[inline]
+            fn div_assign(&mut self, rhs: F) {
+                *self = *self / rhs;
+            }
+        }
+    };
+    ($($ang: ident : $new: ident),*) => {
+        $(impl_ops!($ang : $new);)*
     }
 }
 
-impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Wrap<F, U> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("Wrap").field(&self.0).finish()
-    }
-}
-impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Wrap<F, U> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
-    }
-}
+impl_ops!(Angle: new, Wrap: wrap);
 
 macro_rules! impl_trig {
-    ($ang: ident) => {
+    ($ang: ident : $new: ident) => {
         impl<F: Float, U: Unit<F>> $ang<F, U> {
             /// Computes the sine of this angle.
             #[inline]
@@ -669,34 +600,34 @@ macro_rules! impl_trig {
             #[inline]
             pub fn asin(y: F) -> Self {
                 let rad = y.asin();
-                Self::new(rad * (U::HALF_TURN / F::PI))
+                Self::$new(rad * (U::HALF_TURN / F::PI))
             }
             /// Computes the arc-cosine of the specified value.
             #[inline]
             pub fn acos(x: F) -> Self {
                 let rad = x.acos();
-                Self::new(rad * (U::HALF_TURN / F::PI))
+                Self::$new(rad * (U::HALF_TURN / F::PI))
             }
             /// Computes the arc-tangent of the specified value.
             #[inline]
             pub fn atan(tan: F) -> Self {
                 let rad = tan.atan();
-                Self::new(rad * (U::HALF_TURN / F::PI))
+                Self::$new(rad * (U::HALF_TURN / F::PI))
             }
             /// Computes the four-quadrant arc-tangent of the specified fraction.
             #[inline]
             pub fn atan2(y: F, x: F) -> Self {
                 let rad = y.atan2(x);
-                Self::new(rad * (U::HALF_TURN / F::PI))
+                Self::$new(rad * (U::HALF_TURN / F::PI))
             }
         }
     };
-    ($($ang: ident),*) => {
-        $(impl_trig!($ang);)*
+    ($($ang: ident : $new: ident),*) => {
+        $(impl_trig!($ang : $new);)*
     };
 }
 
-impl_trig!(Angle, Wrap);
+impl_trig!(Angle: new, Wrap: new_unchecked);
 
 /// A 32-bit angle measured in radians.
 ///
