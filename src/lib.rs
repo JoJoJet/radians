@@ -61,6 +61,15 @@ pub trait Float:
     /// Truncates the fractional part from this value.
     fn trunc(self) -> Self;
 
+    fn sin(self) -> Self;
+    fn cos(self) -> Self;
+    fn tan(self) -> Self;
+
+    fn asin(self) -> Self;
+    fn acos(self) -> Self;
+    fn atan(self) -> Self;
+    fn atan2(self, _: Self) -> Self;
+
     /// Type that implements [`std::cmp::Ord`], which this floating point type can be trivially converted to.
     type Ord: Ord;
     /// Converts this floating point number to a type that implements total ordering. Conversion should be trivial.  
@@ -107,6 +116,35 @@ macro_rules! impl_float {
             #[inline]
             fn trunc(self) -> Self {
                 <$f>::trunc(self)
+            }
+
+            fn sin(self) -> Self {
+                <$f>::sin(self)
+            }
+            #[inline]
+            fn cos(self) -> Self {
+                <$f>::cos(self)
+            }
+            #[inline]
+            fn tan(self) -> Self {
+                <$f>::tan(self)
+            }
+
+            #[inline]
+            fn asin(self) -> Self {
+                <$f>::asin(self)
+            }
+            #[inline]
+            fn acos(self) -> Self {
+                <$f>::acos(self)
+            }
+            #[inline]
+            fn atan(self) -> Self {
+                <$f>::atan(self)
+            }
+            #[inline]
+            fn atan2(self, b: Self) -> Self {
+                <$f>::atan2(self, b)
             }
 
             type Ord = $i;
@@ -452,6 +490,11 @@ impl<F: Float, U: Unit<F>> Wrap<F, U> {
         let val = (-val + U::HALF_TURN).rem_euclid(U::FULL_TURN) - U::HALF_TURN;
         Self(Angle::new(-val))
     }
+    /// Creates a new angle, without checking if its in range.
+    #[inline]
+    fn new(val: F) -> Self {
+        Self(Angle::new(val))
+    }
 
     /// Gets the value of this angle.
     #[inline]
@@ -566,6 +609,67 @@ impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for Wrap<F, U> {
     }
 }
 
+macro_rules! impl_trig {
+    ($ang: ident) => {
+        impl<F: Float, U: Unit<F>> $ang<F, U> {
+            /// Computes the sine of this angle.
+            #[inline]
+            pub fn sin(self) -> F {
+                let rad = self.val_raw() * (F::PI / U::HALF_TURN);
+                rad.sin()
+            }
+            /// Computes the cosine of this angle.
+            #[inline]
+            pub fn cos(self) -> F {
+                let rad = self.val_raw() * (F::PI / U::HALF_TURN);
+                rad.cos()
+            }
+            /// Computes both the sine and cosine of this angle.
+            #[inline]
+            pub fn sin_cos(self) -> (F, F) {
+                let rad = self.val_raw() * (F::PI / U::HALF_TURN);
+                (rad.sin(), rad.cos())
+            }
+            /// Computes the tangent of this angle.
+            #[inline]
+            pub fn tan(self) -> F {
+                let rad = self.val_raw() * (F::PI / U::HALF_TURN);
+                rad.tan()
+            }
+
+            /// Computes the arc-sine of the specified value.
+            #[inline]
+            pub fn asin(y: F) -> Self {
+                let rad = y.asin();
+                Self::new(rad * (U::HALF_TURN / F::PI))
+            }
+            /// Computes the arc-cosine of the specified value.
+            #[inline]
+            pub fn acos(x: F) -> Self {
+                let rad = x.acos();
+                Self::new(rad * (U::HALF_TURN / F::PI))
+            }
+            /// Computes the arc-tangent of the specified value.
+            #[inline]
+            pub fn atan(tan: F) -> Self {
+                let rad = tan.atan();
+                Self::new(rad * (U::HALF_TURN / F::PI))
+            }
+            /// Computes the four-quadrant arc-tangent of the specified fraction.
+            #[inline]
+            pub fn atan2(y: F, x: F) -> Self {
+                let rad = y.atan2(x);
+                Self::new(rad * (U::HALF_TURN / F::PI))
+            }
+        }
+    };
+    ($($ang: ident),*) => {
+        $(impl_trig!($ang);)*
+    };
+}
+
+impl_trig!(Angle, Wrap);
+
 /// A 32-bit angle measured in radians.
 ///
 /// This type is guaranteed to be finite (in debug mode). As such, it implements total equality and ordering.
@@ -616,7 +720,7 @@ mod tests {
         };
     }
 
-    use std::f64::consts::PI;
+    use std::f64::consts::{PI, SQRT_2};
 
     #[test]
     fn consts() {
@@ -750,6 +854,90 @@ mod tests {
         let mut val = Wrap64::QUARTER_TURN;
         val /= 2.0;
         assert_epsilon!(val.val(), PI / 4.0);
+    }
+
+    #[test]
+    fn trig() {
+        assert_epsilon!(Rad64::ZERO.sin(), 0.0);
+        assert_epsilon!(Rad64::ZERO.cos(), 1.0);
+        assert_epsilon!(Rad64::ZERO.tan(), 0.0);
+        assert_epsilon!(Wrap64::ZERO.sin(), 0.0);
+        assert_epsilon!(Wrap64::ZERO.cos(), 1.0);
+        assert_epsilon!(Wrap64::ZERO.tan(), 0.0);
+
+        assert_epsilon!((Rad64::HALF_TURN / 4.0).sin(), SQRT_2.recip());
+        assert_epsilon!((Rad64::HALF_TURN / 4.0).cos(), SQRT_2.recip());
+        assert_epsilon!((Rad64::HALF_TURN / 4.0).tan(), 1.0);
+        assert_epsilon!((Wrap64::HALF_TURN / 4.0).sin(), SQRT_2.recip());
+        assert_epsilon!((Wrap64::HALF_TURN / 4.0).cos(), SQRT_2.recip());
+        assert_epsilon!((Wrap64::HALF_TURN / 4.0).tan(), 1.0);
+
+        assert_epsilon!(Rad64::QUARTER_TURN.sin(), 1.0);
+        assert_epsilon!(Rad64::QUARTER_TURN.cos(), 0.0);
+        assert_epsilon!(Wrap64::QUARTER_TURN.sin(), 1.0);
+        assert_epsilon!(Wrap64::QUARTER_TURN.cos(), 0.0);
+
+        assert_epsilon!(Rad64::HALF_TURN.sin(), 0.0);
+        assert_epsilon!(Rad64::HALF_TURN.cos(), -1.0);
+        assert_epsilon!(Rad64::HALF_TURN.tan(), 0.0);
+        assert_epsilon!(Wrap64::HALF_TURN.sin(), 0.0);
+        assert_epsilon!(Wrap64::HALF_TURN.cos(), -1.0);
+        assert_epsilon!(Wrap64::HALF_TURN.tan(), 0.0);
+
+        assert_epsilon!((-Rad64::HALF_TURN / 4.0).sin(), -SQRT_2.recip());
+        assert_epsilon!((-Rad64::HALF_TURN / 4.0).cos(), SQRT_2.recip());
+        assert_epsilon!((-Rad64::HALF_TURN / 4.0).tan(), -1.0);
+        assert_epsilon!((Wrap64::HALF_TURN / -4.0).sin(), -SQRT_2.recip());
+        assert_epsilon!((Wrap64::HALF_TURN / -4.0).cos(), SQRT_2.recip());
+        assert_epsilon!((Wrap64::HALF_TURN / -4.0).tan(), -1.0);
+
+        assert_epsilon!((-Rad64::QUARTER_TURN).sin(), -1.0);
+        assert_epsilon!((-Rad64::QUARTER_TURN).cos(), 0.0);
+        assert_epsilon!((-Wrap64::QUARTER_TURN).sin(), -1.0);
+        assert_epsilon!((-Wrap64::QUARTER_TURN).cos(), 0.0);
+    }
+
+    #[test]
+    fn inverse_trig() {
+        assert_epsilon!(Rad64::asin(0.0).val(), 0.0);
+        assert_epsilon!(Rad64::acos(0.0).val(), PI / 2.0);
+        assert_epsilon!(Wrap64::asin(0.0).val(), 0.0);
+        assert_epsilon!(Wrap64::acos(0.0).val(), PI / 2.0);
+
+        assert_epsilon!(Rad64::asin(SQRT_2 / 2.0).val(), PI / 4.0);
+        assert_epsilon!(Rad64::acos(SQRT_2 / 2.0).val(), PI / 4.0);
+        assert_epsilon!(Wrap64::asin(SQRT_2 / 2.0).val(), PI / 4.0);
+        assert_epsilon!(Wrap64::acos(SQRT_2 / 2.0).val(), PI / 4.0);
+
+        assert_epsilon!(Rad64::asin(1.0).val(), PI / 2.0);
+        assert_epsilon!(Rad64::acos(1.0).val(), 0.0);
+        assert_epsilon!(Wrap64::asin(1.0).val(), PI / 2.0);
+        assert_epsilon!(Wrap64::acos(1.0).val(), 0.0);
+
+        assert_epsilon!(Rad64::asin(-SQRT_2 / 2.0).val(), -PI / 4.0);
+        assert_epsilon!(Rad64::acos(-SQRT_2 / 2.0).val(), 3.0 * PI / 4.0);
+        assert_epsilon!(Wrap64::asin(-SQRT_2 / 2.0).val(), -PI / 4.0);
+        assert_epsilon!(Wrap64::acos(-SQRT_2 / 2.0).val(), 3.0 * PI / 4.0);
+
+        assert_epsilon!(Rad64::asin(-1.0).val(), -PI / 2.0);
+        assert_epsilon!(Rad64::acos(-1.0).val(), PI);
+        assert_epsilon!(Wrap64::asin(-1.0).val(), -PI / 2.0);
+        assert_epsilon!(Wrap64::acos(-1.0).val(), PI);
+
+        assert_epsilon!(Rad64::atan2(0.0, 1.0).val(), 0.0);
+        assert_epsilon!(Rad64::atan2(SQRT_2 / 2.0, SQRT_2 / 2.0).val(), PI / 4.0);
+        assert_epsilon!(Rad64::atan2(1.0, 0.0).val(), PI / 2.0);
+        assert_epsilon!(
+            Rad64::atan2(SQRT_2 / 2.0, -SQRT_2 / 2.0).val(),
+            3.0 * PI / 4.0
+        );
+        assert_epsilon!(Rad64::atan2(0.0, -1.0).val(), PI);
+        assert_epsilon!(Rad64::atan2(-SQRT_2 / 2.0, SQRT_2 / 2.0).val(), -PI / 4.0);
+        assert_epsilon!(Rad64::atan2(-1.0, 0.0).val(), -PI / 2.0);
+        assert_epsilon!(
+            Rad64::atan2(-SQRT_2 / 2.0, -SQRT_2 / 2.0).val(),
+            -3.0 * PI / 4.0
+        );
     }
 
     #[test]
