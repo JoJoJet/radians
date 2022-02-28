@@ -70,6 +70,8 @@ pub trait Float:
     fn atan(self) -> Self;
     fn atan2(self, _: Self) -> Self;
 
+    fn total_eq(self, _: Self) -> bool;
+
     /// Type that implements [`std::cmp::Ord`], which this floating point type can be trivially converted to.
     type Ord: Ord;
     /// Converts this floating point number to a type that implements total ordering. Conversion should be trivial.  
@@ -147,6 +149,26 @@ macro_rules! impl_float {
                 <$f>::atan2(self, b)
             }
 
+            #[inline]
+            fn total_eq(self, rhs: Self) -> bool {
+                let a = self.to_bits();
+                let b = rhs.to_bits();
+
+                // disregard the sign bit when comparing zeros.
+                if a << 1 == 0 {
+                    return zero(b);
+
+                    #[cold]
+                    fn zero(b: $i) -> bool {
+                        b << 1 == 0
+                    }
+                }
+                // compare any other numbers directly.
+                else {
+                    a == b
+                }
+            }
+
             type Ord = $i;
             #[inline]
             fn to_ord(self) -> Self::Ord {
@@ -218,7 +240,7 @@ impl<F: Float, U: Unit<F>> Copy for Angle<F, U> {}
 impl<F: Float, U: Unit<F>> PartialEq for Angle<F, U> {
     #[inline]
     fn eq(&self, rhs: &Self) -> bool {
-        self.0.to_ord() == rhs.0.to_ord()
+        self.0.total_eq(rhs.0)
     }
 }
 impl<F: Float, U: Unit<F>> Eq for Angle<F, U> {}
