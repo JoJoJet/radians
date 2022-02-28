@@ -285,107 +285,6 @@ impl<F: Float, U: Unit<F>> Angle<F, U> {
     }
 }
 
-pub struct Radians;
-impl<F: Float> Unit<F> for Radians {
-    const DBG_NAME: &'static str = "Rad";
-
-    const QUARTER_TURN: F = F::PI_OVER_TWO;
-    const HALF_TURN: F = F::PI;
-    const FULL_TURN: F = F::TAU;
-
-    fn display(val: F, f: &mut fmt::Formatter) -> fmt::Result
-    where
-        F: fmt::Display,
-    {
-        if val.is_sign_negative() {
-            write!(f, "-")?;
-        } else if f.sign_plus() {
-            write!(f, "+")?;
-        }
-        let val = val.abs();
-        if val == F::ZERO {
-            if let Some(prec) = f.precision() {
-                write!(f, "0.{:0<prec$}", 0)
-            } else {
-                write!(f, "0")
-            }
-        } else {
-            if let Some(prec) = f.precision() {
-                write!(f, "{:.prec$}π", val / F::PI)
-            } else {
-                write!(f, "{}π", val / F::PI)
-            }
-        }
-    }
-}
-
-/// An angle measured in radians.
-///
-/// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
-pub type Rad<F> = Angle<F, Radians>;
-
-impl<F: Float> Rad<F> {
-    /// Gets the value of this angle in radians.
-    #[inline]
-    pub fn val(self) -> F {
-        self.0
-    }
-    /// Converts this angle to degrees.
-    pub fn deg(self) -> Deg<F> {
-        Deg::new(self.0 * (F::ONE_EIGHTY / F::PI))
-    }
-}
-
-pub struct Degrees;
-impl<F: Float> Unit<F> for Degrees {
-    const DBG_NAME: &'static str = "Deg";
-
-    const QUARTER_TURN: F = F::NINETY;
-    const HALF_TURN: F = F::ONE_EIGHTY;
-    const FULL_TURN: F = F::THREE_SIXTY;
-
-    fn display(val: F, f: &mut fmt::Formatter) -> fmt::Result
-    where
-        F: fmt::Display,
-    {
-        let deg_frac = val.abs();
-        let deg = deg_frac.trunc();
-
-        let min_frac = (deg_frac - deg) * F::SIXTY;
-        let min = min_frac.trunc();
-
-        let sec_frac = (min_frac - min) * F::SIXTY;
-
-        if val.is_sign_negative() {
-            write!(f, "-")?;
-        } else if f.sign_plus() {
-            write!(f, "+")?;
-        }
-        write!(f, "{deg}°{min}'")?;
-        if let Some(prec) = f.precision() {
-            write!(f, "{sec_frac:.prec$}''")?;
-        } else {
-            write!(f, "{sec_frac}''")?;
-        }
-
-        Ok(())
-    }
-}
-
-/// An angle measured in degrees.
-pub type Deg<F> = Angle<F, Degrees>;
-
-impl<F: Float> Deg<F> {
-    /// Gets the value of this angle in degrees.
-    #[inline]
-    pub fn val(self) -> F {
-        self.0
-    }
-    pub fn rad(self) -> Rad<F> {
-        Rad::new(self.0 * (F::PI / F::ONE_EIGHTY))
-    }
-}
-
 /// An angle that wraps between a negative half turn and a positive half turn.
 #[repr(transparent)]
 pub struct Wrap<F: Float, U: Unit<F>>(Angle<F, U>);
@@ -432,21 +331,6 @@ impl<F: Float, U: Unit<F>> Wrap<F, U> {
     #[inline]
     pub fn mag(self) -> Angle<F, U> {
         self.0.mag()
-    }
-}
-
-impl<F: Float> Wrap<F, Radians> {
-    /// Gets the value of this angle in radians.
-    #[inline]
-    pub fn val(self) -> F {
-        self.0 .0
-    }
-}
-impl<F: Float> Wrap<F, Degrees> {
-    /// Gets the value of this angle in degrees.
-    #[inline]
-    pub fn val(self) -> F {
-        self.0 .0
     }
 }
 
@@ -629,18 +513,135 @@ macro_rules! impl_trig {
 
 impl_trig!(Angle: new, Wrap: new_unchecked);
 
+pub struct Radians;
+impl<F: Float> Unit<F> for Radians {
+    const DBG_NAME: &'static str = "Rad";
+
+    const QUARTER_TURN: F = F::PI_OVER_TWO;
+    const HALF_TURN: F = F::PI;
+    const FULL_TURN: F = F::TAU;
+
+    fn display(val: F, f: &mut fmt::Formatter) -> fmt::Result
+    where
+        F: fmt::Display,
+    {
+        if val.is_sign_negative() {
+            write!(f, "-")?;
+        } else if f.sign_plus() {
+            write!(f, "+")?;
+        }
+        let val = val.abs();
+        if let Some(prec) = f.precision() {
+            write!(f, "{:.prec$}", val / F::PI)?;
+        } else {
+            write!(f, "{}", val / F::PI)?;
+        }
+        if val != F::ZERO {
+            write!(f, "π")?;
+        }
+        Ok(())
+    }
+}
+
+/// An angle measured in radians.
+///
+/// This type is guaranteed to be finite (in debug mode). As such, it implements total equality and ordering.
+/// Ordering for non-finite values is unspecified.
+///
+/// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
+pub type Rad<F> = Angle<F, Radians>;
+
+impl<F: Float> Rad<F> {
+    /// Gets the value of this angle in radians.
+    #[inline]
+    pub fn val(self) -> F {
+        self.0
+    }
+    /// Converts this angle to degrees.
+    pub fn deg(self) -> Deg<F> {
+        Deg::new(self.0 * (F::ONE_EIGHTY / F::PI))
+    }
+}
+impl<F: Float> Wrap<F, Radians> {
+    /// Gets the value of this angle in radians.
+    #[inline]
+    pub fn val(self) -> F {
+        self.0 .0
+    }
+}
+
 /// A 32-bit angle measured in radians.
 ///
 /// This type is guaranteed to be finite (in debug mode). As such, it implements total equality and ordering.
+/// Ordering for non-finite values is unspecified.
 ///
 /// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
 pub type Rad32 = Rad<f32>;
 /// A 64-bit angle measured in radians.
 ///
 /// This type is guaranteed to be finite (in debug mode). As such, it implements total equality and ordering.
+/// Ordering for non-finite values is unspecified.
 ///
 /// When formatting with [`Display`](fmt::Display), it will be shown as a multiple of π.
 pub type Rad64 = Rad<f64>;
+
+pub struct Degrees;
+impl<F: Float> Unit<F> for Degrees {
+    const DBG_NAME: &'static str = "Deg";
+
+    const QUARTER_TURN: F = F::NINETY;
+    const HALF_TURN: F = F::ONE_EIGHTY;
+    const FULL_TURN: F = F::THREE_SIXTY;
+
+    fn display(val: F, f: &mut fmt::Formatter) -> fmt::Result
+    where
+        F: fmt::Display,
+    {
+        let deg_frac = val.abs();
+        let deg = deg_frac.trunc();
+
+        let min_frac = (deg_frac - deg) * F::SIXTY;
+        let min = min_frac.trunc();
+
+        let sec_frac = (min_frac - min) * F::SIXTY;
+
+        if val.is_sign_negative() {
+            write!(f, "-")?;
+        } else if f.sign_plus() {
+            write!(f, "+")?;
+        }
+        write!(f, "{deg}°{min}'")?;
+        if let Some(prec) = f.precision() {
+            write!(f, "{sec_frac:.prec$}''")?;
+        } else {
+            write!(f, "{sec_frac}''")?;
+        }
+
+        Ok(())
+    }
+}
+
+/// An angle measured in degrees.
+pub type Deg<F> = Angle<F, Degrees>;
+
+impl<F: Float> Deg<F> {
+    /// Gets the value of this angle in degrees.
+    #[inline]
+    pub fn val(self) -> F {
+        self.0
+    }
+    /// Converts this angle to radians.
+    pub fn rad(self) -> Rad<F> {
+        Rad::new(self.0 * (F::PI / F::ONE_EIGHTY))
+    }
+}
+impl<F: Float> Wrap<F, Degrees> {
+    /// Gets the value of this angle in degrees.
+    #[inline]
+    pub fn val(self) -> F {
+        self.0 .0
+    }
+}
 
 /// A 32-bit angle measured in degrees.
 ///
