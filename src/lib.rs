@@ -4,6 +4,7 @@
 //! as well as [`Wrap32`] and [`Wrap64`] for angles that automatically wrap around -π and +π.
 //!
 //! Supports custom formatting in terms of degrees, minutes, and seconds, via the `Rad{32, 64}`.deg() method.
+#![warn(clippy::pedantic)]
 
 use std::{
     fmt,
@@ -58,6 +59,7 @@ pub trait Float:
     const MAX: Self;
 
     /// Modulus operation.
+    #[must_use]
     fn rem_euclid(self, _: Self) -> Self;
 }
 
@@ -97,6 +99,9 @@ pub trait Unit<F: Float>: Sized {
     /// Number for a full turn around a circle in this unit space.
     const FULL_TURN: F;
 
+    /// How to format [`Angle`]s of this type.
+    /// # Errors
+    /// If formatting fails.
     fn display(val: F, f: &mut fmt::Formatter) -> fmt::Result
     where
         F: fmt::Display;
@@ -185,6 +190,7 @@ impl<F: Float, U: Unit<F>> Angle<F, U> {
     }
     /// Returns the magnitude (absolute value) of this angle.
     #[inline]
+    #[must_use = "method returns new value instead of modifying self"]
     pub fn mag(mut self) -> Self {
         self.0 = self.0.abs();
         self
