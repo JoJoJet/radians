@@ -11,19 +11,29 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
+/// Contains a set of traits that must be implemented on a type
+/// for it to be used in this crate.
+pub mod ops {
+    pub use real_float::{ops::*, IsFinite, IsNan, ToOrd};
+}
+
 /// A floating-point number that serves as the backing value of an [`Angle`].
 pub trait Float:
     Copy
     + PartialEq
+    + ops::ToOrd
     + Add<Output = Self>
-    + AddAssign
     + Sub<Output = Self>
-    + SubAssign
     + Neg<Output = Self>
     + Mul<Output = Self>
-    + MulAssign
     + Div<Output = Self>
-    + DivAssign
+    + ops::IsNan
+    + ops::IsFinite
+    + ops::Signed
+    + ops::Round
+    + ops::Pow
+    + ops::Exp
+    + ops::Trig
 {
     /// Additive identity, 0.
     const ZERO: Self;
@@ -47,38 +57,8 @@ pub trait Float:
     /// Maximum finite value.
     const MAX: Self;
 
-    /// Returns whether this value is finite (not infinity, not NaN).
-    fn is_finite(self) -> bool;
-    fn is_sign_positive(self) -> bool;
-    #[inline]
-    fn is_sign_negative(self) -> bool {
-        !self.is_sign_positive()
-    }
     /// Modulus operation.
     fn rem_euclid(self, _: Self) -> Self;
-    /// Absolute value.
-    fn abs(self) -> Self;
-    /// Truncates the fractional part from this value.
-    fn trunc(self) -> Self;
-
-    fn sin(self) -> Self;
-    fn cos(self) -> Self;
-    fn tan(self) -> Self;
-
-    fn asin(self) -> Self;
-    fn acos(self) -> Self;
-    fn atan(self) -> Self;
-    fn atan2(self, _: Self) -> Self;
-
-    fn total_eq(self, _: Self) -> bool;
-
-    /// Type that implements [`std::cmp::Ord`], which this floating point type can be trivially converted to.
-    type Ord: Ord;
-    /// Converts this floating point number to a type that implements total ordering. Conversion should be trivial.  
-    ///
-    /// For insight on how to implement this, check out the README of https://github.com/notriddle/rust-float-ord.
-    /// Note that the implementation in that crate is slightly incorrect, as it will make 0.0 != -0.0
-    fn to_ord(self) -> Self::Ord;
 }
 
 macro_rules! impl_float {
@@ -96,107 +76,8 @@ macro_rules! impl_float {
             const MAX: $f = $f::MAX;
 
             #[inline]
-            fn is_finite(self) -> bool {
-                <$f>::is_finite(self)
-            }
-            #[inline]
-            fn is_sign_positive(self) -> bool {
-                <$f>::is_sign_positive(self)
-            }
-            #[inline]
-            fn is_sign_negative(self) -> bool {
-                <$f>::is_sign_negative(self)
-            }
-            #[inline]
             fn rem_euclid(self, rhs: Self) -> Self {
                 <$f>::rem_euclid(self, rhs)
-            }
-            #[inline]
-            fn abs(self) -> Self {
-                <$f>::abs(self)
-            }
-            #[inline]
-            fn trunc(self) -> Self {
-                <$f>::trunc(self)
-            }
-
-            fn sin(self) -> Self {
-                <$f>::sin(self)
-            }
-            #[inline]
-            fn cos(self) -> Self {
-                <$f>::cos(self)
-            }
-            #[inline]
-            fn tan(self) -> Self {
-                <$f>::tan(self)
-            }
-
-            #[inline]
-            fn asin(self) -> Self {
-                <$f>::asin(self)
-            }
-            #[inline]
-            fn acos(self) -> Self {
-                <$f>::acos(self)
-            }
-            #[inline]
-            fn atan(self) -> Self {
-                <$f>::atan(self)
-            }
-            #[inline]
-            fn atan2(self, b: Self) -> Self {
-                <$f>::atan2(self, b)
-            }
-
-            #[inline]
-            fn total_eq(self, rhs: Self) -> bool {
-                let a = self.to_bits();
-                let b = rhs.to_bits();
-
-                // disregard the sign bit when comparing zeros.
-                if a << 1 == 0 {
-                    return zero(b);
-
-                    #[cold]
-                    fn zero(b: $i) -> bool {
-                        b << 1 == 0
-                    }
-                }
-                // compare any other numbers directly.
-                else {
-                    a == b
-                }
-            }
-
-            type Ord = $i;
-            #[inline]
-            fn to_ord(self) -> Self::Ord {
-                // assert that the types have equal sizes.
-                const _ASSERT: [(); std::mem::size_of::<$f>()] = [(); std::mem::size_of::<$i>()];
-
-                const MSB: $i = 1 << (std::mem::size_of::<$f>() * 8 - 1);
-                let bits = self.to_bits();
-                if bits & MSB == 0 {
-                    // if it's positive, flip the most significant bit.
-                    bits | MSB
-                } else {
-                    // if its negative zero, pretend that its positive zero.
-                    if bits << 1 == 0 {
-                        return zero();
-
-                        // Benchmarking shows that marking as cold provides a slight performance boost.
-                        // This is because -0 is a special case.
-                        #[cold]
-                        fn zero() -> $i {
-                            MSB // this is the result of flipping the most significant bit of +0
-                        }
-                    }
-                    // if it's any other negative number, flip every bit
-                    else {
-                        !bits
-                    }
-                }
             }
         }
     };
@@ -221,9 +102,27 @@ pub trait Unit<F: Float>: Sized {
         F: fmt::Display;
 }
 
+/// # SAFETY:
+/// Ensure that the input angle is finite.
+macro_rules! ang_unchecked {
+    ($e: expr) => {
+        $crate::Angle(
+            ::real_float::finite_unchecked!($e),
+            ::core::marker::PhantomData,
+        )
+    };
+}
+
 /// An angle backed by a floating-point number.
 #[repr(transparent)]
-pub struct Angle<F: Float, U: Unit<F>>(F, PhantomData<U>);
+pub struct Angle<F: Float, U: Unit<F>>(real_float::Finite<F>, PhantomData<U>);
+
+impl<F: Float, U: Unit<F>> From<real_float::Finite<F>> for Angle<F, U> {
+    #[inline]
+    fn from(f: real_float::Finite<F>) -> Self {
+        Self(f, PhantomData)
+    }
+}
 
 impl<F: Float, U: Unit<F>> PartialOrd for Angle<F, U> {
     #[inline]
@@ -234,48 +133,55 @@ impl<F: Float, U: Unit<F>> PartialOrd for Angle<F, U> {
 impl<F: Float, U: Unit<F>> Ord for Angle<F, U> {
     #[inline]
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.to_ord().cmp(&other.0.to_ord())
+        self.0.cmp(&other.0)
     }
 }
+
+impl<F: Float, U: Unit<F>> Clone for Angle<F, U> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self::from(self.0)
+    }
+}
+impl<F: Float, U: Unit<F>> Copy for Angle<F, U> {}
 
 impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Angle<F, U> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple(U::DBG_NAME).field(&self.0).finish()
+        f.debug_tuple(U::DBG_NAME).field(&self.val_raw()).finish()
     }
 }
 
 impl<F: Float, U: Unit<F>> Angle<F, U> {
     /// Zero angle, additive identity.
-    pub const ZERO: Self = Self(F::ZERO, PhantomData);
+    pub const ZERO: Self = unsafe { ang_unchecked!(F::ZERO) };
     /// Quarter turn around a circle. Equal to π/2 radians or 90°.
-    pub const QUARTER_TURN: Self = Self(U::QUARTER_TURN, PhantomData);
+    pub const QUARTER_TURN: Self = unsafe { ang_unchecked!(U::QUARTER_TURN) };
     /// Half turn around a circle. Equal to π radians or 180°.
-    pub const HALF_TURN: Self = Self(U::HALF_TURN, PhantomData);
+    pub const HALF_TURN: Self = unsafe { ang_unchecked!(U::HALF_TURN) };
     /// Full turn around a circle. Equal to 2π radians or 360°.
-    pub const FULL_TURN: Self = Self(U::FULL_TURN, PhantomData);
+    pub const FULL_TURN: Self = unsafe { ang_unchecked!(U::FULL_TURN) };
     /// Minimum finite angle.
-    pub const MIN: Self = Self(F::MIN, PhantomData);
+    pub const MIN: Self = unsafe { ang_unchecked!(F::MIN) };
     /// Maximum finite angle.
-    pub const MAX: Self = Self(F::MAX, PhantomData);
+    pub const MAX: Self = unsafe { ang_unchecked!(F::MAX) };
 
     /// Create a new angle from a raw value.
     /// # Panics
     /// If the value is non-finite (debug mode).
     #[inline]
     pub fn new(val: F) -> Self {
-        debug_assert!(val.is_finite());
-        Self(val, PhantomData)
+        Self::from(real_float::Finite::new(val))
     }
 
     /// Gets the value of this angle.
     #[inline]
     pub fn val_raw(self) -> F {
-        self.0
+        self.0.val()
     }
     #[inline]
     pub fn wrap(self) -> Wrap<F, U> {
-        Wrap::wrap(self.0)
+        Wrap::wrap(self.0.val())
     }
     /// Returns the magnitude (absolute value) of this angle.
     #[inline]
@@ -288,6 +194,15 @@ impl<F: Float, U: Unit<F>> Angle<F, U> {
 /// An angle that wraps between a negative half turn and a positive half turn.
 #[repr(transparent)]
 pub struct Wrap<F: Float, U: Unit<F>>(Angle<F, U>);
+
+impl<F: Float, U: Unit<F>> Clone for Wrap<F, U> {
+    #[inline]
+    fn clone(&self) -> Self {
+        // we don't need to wrap or anything
+        Self(self.0)
+    }
+}
+impl<F: Float, U: Unit<F>> Copy for Wrap<F, U> {}
 
 impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Wrap<F, U> {
     #[inline]
@@ -307,20 +222,20 @@ impl<F: Float, U: Unit<F>> Wrap<F, U> {
     pub const FULL_TURN: Angle<F, U> = Angle::FULL_TURN;
 
     /// Creates a new angle, wrapping between a negative half turn and a positive half turn.
+    #[allow(clippy::self_named_constructors)]
     pub fn wrap(val: F) -> Self {
         let val = (-val + U::HALF_TURN).rem_euclid(U::FULL_TURN) - U::HALF_TURN;
         Self(Angle::new(-val))
     }
     /// Creates a new angle, without checking if it's in range.
-    #[inline]
     fn new_unchecked(val: F) -> Self {
-        Self(Angle::new(val))
+        Self(unsafe { ang_unchecked!(val) })
     }
 
     /// Gets the value of this angle.
     #[inline]
     pub fn val_raw(self) -> F {
-        self.0 .0
+        self.0.val_raw()
     }
     /// Gets the inner representation of this angle.
     #[inline]
@@ -342,26 +257,18 @@ impl<F: Float, U: Unit<F>> From<Wrap<F, U>> for Angle<F, U> {
 }
 
 macro_rules! impl_traits {
-    ($ang: ident : $new: ident) => {
+    ($ang: ident) => {
         impl<F: Float, U: Unit<F>> Default for $ang<F, U> {
             #[inline]
             fn default() -> Self {
-                Self::$new(F::ZERO)
+                Self::ZERO
             }
         }
-
-        impl<F: Float, U: Unit<F>> Clone for $ang<F, U> {
-            #[inline]
-            fn clone(&self) -> Self {
-                Self::$new(self.val_raw())
-            }
-        }
-        impl<F: Float, U: Unit<F>> Copy for $ang<F, U> {}
 
         impl<F: Float, U: Unit<F>> PartialEq for $ang<F, U> {
             #[inline]
             fn eq(&self, rhs: &Self) -> bool {
-                self.val_raw().total_eq(rhs.val_raw())
+                self.0.eq(&rhs.0)
             }
         }
         impl<F: Float, U: Unit<F>> Eq for $ang<F, U> {}
@@ -372,12 +279,12 @@ macro_rules! impl_traits {
             }
         }
     };
-    ($($ang: ident : $new: ident),*) => {
-        $(impl_traits!($ang : $new);)*
+    ($($ang: ident),*) => {
+        $(impl_traits!($ang);)*
     }
 }
 
-impl_traits!(Angle: new, Wrap: new_unchecked);
+impl_traits!(Angle, Wrap);
 
 macro_rules! impl_ops {
     ($ang: ident : $new: ident) => {
@@ -555,18 +462,18 @@ impl<F: Float> Rad<F> {
     /// Gets the value of this angle in radians.
     #[inline]
     pub fn val(self) -> F {
-        self.0
+        self.0.val()
     }
     /// Converts this angle to degrees.
     pub fn deg(self) -> Deg<F> {
-        Deg::new(self.0 * (F::ONE_EIGHTY / F::PI))
+        Deg::from(self.0 * (F::ONE_EIGHTY / F::PI))
     }
 }
 impl<F: Float> Wrap<F, Radians> {
     /// Gets the value of this angle in radians.
     #[inline]
     pub fn val(self) -> F {
-        self.0 .0
+        self.0.val()
     }
 }
 
@@ -628,18 +535,18 @@ impl<F: Float> Deg<F> {
     /// Gets the value of this angle in degrees.
     #[inline]
     pub fn val(self) -> F {
-        self.0
+        self.0.val()
     }
     /// Converts this angle to radians.
     pub fn rad(self) -> Rad<F> {
-        Rad::new(self.0 * (F::PI / F::ONE_EIGHTY))
+        Rad::from(self.0 * (F::PI / F::ONE_EIGHTY))
     }
 }
 impl<F: Float> Wrap<F, Degrees> {
     /// Gets the value of this angle in degrees.
     #[inline]
     pub fn val(self) -> F {
-        self.0 .0
+        self.0.val()
     }
 }
 
