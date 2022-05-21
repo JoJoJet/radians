@@ -107,17 +107,6 @@ pub trait Unit<F: Float>: Sized {
         F: fmt::Display;
 }
 
-/// # SAFETY:
-/// Ensure that the input angle is finite.
-macro_rules! ang_unchecked {
-    ($e: expr) => {
-        $crate::Angle(
-            ::real_float::finite_unchecked!($e),
-            ::core::marker::PhantomData,
-        )
-    };
-}
-
 /// An angle backed by a floating-point number.
 #[repr(transparent)]
 pub struct Angle<F: Float, U: Unit<F>>(real_float::Finite<F>, PhantomData<U>);
@@ -153,23 +142,23 @@ impl<F: Float, U: Unit<F>> Copy for Angle<F, U> {}
 impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Angle<F, U> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple(U::DBG_NAME).field(&self.val_raw()).finish()
+        f.debug_tuple(U::DBG_NAME).field(&self.val()).finish()
     }
 }
 
 impl<F: Float, U: Unit<F>> Angle<F, U> {
     /// Zero angle, additive identity.
-    pub const ZERO: Self = unsafe { ang_unchecked!(F::ZERO) };
+    pub const ZERO: Self = unsafe { Self::unchecked(F::ZERO) };
     /// Quarter turn around a circle. Equal to π/2 radians or 90°.
-    pub const QUARTER_TURN: Self = unsafe { ang_unchecked!(U::QUARTER_TURN) };
+    pub const QUARTER_TURN: Self = unsafe { Self::unchecked(U::QUARTER_TURN) };
     /// Half turn around a circle. Equal to π radians or 180°.
-    pub const HALF_TURN: Self = unsafe { ang_unchecked!(U::HALF_TURN) };
+    pub const HALF_TURN: Self = unsafe { Self::unchecked(U::HALF_TURN) };
     /// Full turn around a circle. Equal to 2π radians or 360°.
-    pub const FULL_TURN: Self = unsafe { ang_unchecked!(U::FULL_TURN) };
+    pub const FULL_TURN: Self = unsafe { Self::unchecked(U::FULL_TURN) };
     /// Minimum finite angle.
-    pub const MIN: Self = unsafe { ang_unchecked!(F::MIN) };
+    pub const MIN: Self = unsafe { Self::unchecked(F::MIN) };
     /// Maximum finite angle.
-    pub const MAX: Self = unsafe { ang_unchecked!(F::MAX) };
+    pub const MAX: Self = unsafe { Self::unchecked(F::MAX) };
 
     /// Create a new angle from a raw value.
     /// # Panics
@@ -178,10 +167,16 @@ impl<F: Float, U: Unit<F>> Angle<F, U> {
     pub fn new(val: F) -> Self {
         Self::from(real_float::Finite::new(val))
     }
+    /// # Safety
+    /// Ensure that the value is neither infinite nor NaN.
+    #[inline]
+    pub const unsafe fn unchecked(val: F) -> Self {
+        Self(real_float::Finite::unchecked(val), PhantomData)
+    }
 
     /// Gets the value of this angle.
     #[inline]
-    pub fn val_raw(self) -> F {
+    pub const fn val(self) -> F {
         self.0.val()
     }
     #[inline]
@@ -234,18 +229,18 @@ impl<F: Float, U: Unit<F>> Wrap<F, U> {
         Self(Angle::new(-val))
     }
     /// Creates a new angle, without checking if it's in range.
-    fn new_unchecked(val: F) -> Self {
-        Self(unsafe { ang_unchecked!(val) })
+    fn unchecked(val: F) -> Self {
+        Self(unsafe { Angle::unchecked(val) })
     }
 
     /// Gets the value of this angle.
     #[inline]
-    pub fn val_raw(self) -> F {
-        self.0.val_raw()
+    pub const fn val(self) -> F {
+        self.0.val()
     }
     /// Gets the inner representation of this angle.
     #[inline]
-    pub fn inner(self) -> Angle<F, U> {
+    pub const fn inner(self) -> Angle<F, U> {
         self.0
     }
     /// Returns the magnitude (absolute value) of this angle.
@@ -281,7 +276,7 @@ macro_rules! impl_traits {
 
         impl<F: Float + fmt::Display, U: Unit<F>> fmt::Display for $ang<F, U> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                U::display(self.val_raw(), f)
+                U::display(self.val(), f)
             }
         }
     };
@@ -298,7 +293,7 @@ macro_rules! impl_ops {
             type Output = Self;
             #[inline]
             fn add(self, rhs: Rhs) -> Self {
-                Self::$new(self.val_raw() + rhs.into().val_raw())
+                Self::$new(self.val() + rhs.into().val())
             }
         }
         impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> AddAssign<Rhs> for $ang<F, U> {
@@ -312,7 +307,7 @@ macro_rules! impl_ops {
             type Output = Self;
             #[inline]
             fn sub(self, rhs: Rhs) -> Self {
-                Self::$new(self.val_raw() - rhs.into().val_raw())
+                Self::$new(self.val() - rhs.into().val())
             }
         }
         impl<F: Float, U: Unit<F>, Rhs: Into<Angle<F, U>>> SubAssign<Rhs> for $ang<F, U> {
@@ -326,7 +321,7 @@ macro_rules! impl_ops {
             type Output = Self;
             #[inline]
             fn neg(self) -> Self {
-                Self::$new(-self.val_raw())
+                Self::$new(-self.val())
             }
         }
 
@@ -334,7 +329,7 @@ macro_rules! impl_ops {
             type Output = Self;
             #[inline]
             fn mul(self, rhs: F) -> Self {
-                Self::$new(self.val_raw() * rhs)
+                Self::$new(self.val() * rhs)
             }
         }
         impl<F: Float, U: Unit<F>> MulAssign<F> for $ang<F, U> {
@@ -348,7 +343,7 @@ macro_rules! impl_ops {
             type Output = Self;
             #[inline]
             fn div(self, rhs: F) -> Self {
-                Self::$new(self.val_raw() / rhs)
+                Self::$new(self.val() / rhs)
             }
         }
         impl<F: Float, U: Unit<F>> DivAssign<F> for $ang<F, U> {
@@ -371,25 +366,25 @@ macro_rules! impl_trig {
             /// Computes the sine of this angle.
             #[inline]
             pub fn sin(self) -> F {
-                let rad = self.val_raw() * (F::PI / U::HALF_TURN);
+                let rad = self.val() * (F::PI / U::HALF_TURN);
                 rad.sin()
             }
             /// Computes the cosine of this angle.
             #[inline]
             pub fn cos(self) -> F {
-                let rad = self.val_raw() * (F::PI / U::HALF_TURN);
+                let rad = self.val() * (F::PI / U::HALF_TURN);
                 rad.cos()
             }
             /// Computes both the sine and cosine of this angle.
             #[inline]
             pub fn sin_cos(self) -> (F, F) {
-                let rad = self.val_raw() * (F::PI / U::HALF_TURN);
+                let rad = self.val() * (F::PI / U::HALF_TURN);
                 (rad.sin(), rad.cos())
             }
             /// Computes the tangent of this angle.
             #[inline]
             pub fn tan(self) -> F {
-                let rad = self.val_raw() * (F::PI / U::HALF_TURN);
+                let rad = self.val() * (F::PI / U::HALF_TURN);
                 rad.tan()
             }
 
@@ -424,7 +419,7 @@ macro_rules! impl_trig {
     };
 }
 
-impl_trig!(Angle: new, Wrap: new_unchecked);
+impl_trig!(Angle: new, Wrap: unchecked);
 
 pub struct Radians;
 impl<F: Float> Unit<F> for Radians {
@@ -465,21 +460,9 @@ impl<F: Float> Unit<F> for Radians {
 pub type Rad<F> = Angle<F, Radians>;
 
 impl<F: Float> Rad<F> {
-    /// Gets the value of this angle in radians.
-    #[inline]
-    pub fn val(self) -> F {
-        self.0.val()
-    }
     /// Converts this angle to degrees.
     pub fn deg(self) -> Deg<F> {
         Deg::from(self.0 * (F::ONE_EIGHTY / F::PI))
-    }
-}
-impl<F: Float> Wrap<F, Radians> {
-    /// Gets the value of this angle in radians.
-    #[inline]
-    pub fn val(self) -> F {
-        self.0.val()
     }
 }
 
@@ -538,21 +521,9 @@ impl<F: Float> Unit<F> for Degrees {
 pub type Deg<F> = Angle<F, Degrees>;
 
 impl<F: Float> Deg<F> {
-    /// Gets the value of this angle in degrees.
-    #[inline]
-    pub fn val(self) -> F {
-        self.0.val()
-    }
     /// Converts this angle to radians.
     pub fn rad(self) -> Rad<F> {
         Rad::from(self.0 * (F::PI / F::ONE_EIGHTY))
-    }
-}
-impl<F: Float> Wrap<F, Degrees> {
-    /// Gets the value of this angle in degrees.
-    #[inline]
-    pub fn val(self) -> F {
-        self.0.val()
     }
 }
 
