@@ -215,7 +215,7 @@ impl<F: Float + fmt::Debug, U: Unit<F>> fmt::Debug for Wrap<F, U> {
 impl<F: Float, U: Unit<F>> Wrap<F, U> {
     /// Zero angle, additive identity.
     pub const ZERO: Self = Self(Angle::ZERO);
-    /// Half turn around a circle. Equal to π/2 radians or 90°.
+    /// Quarter turn around a circle. Equal to π/2 radians or 90°.
     pub const QUARTER_TURN: Self = Self(Angle::QUARTER_TURN);
     /// Half turn around a circle. Equal to π radians or 180°.
     pub const HALF_TURN: Self = Self(Angle::HALF_TURN);
@@ -350,6 +350,13 @@ macro_rules! impl_ops {
             #[inline]
             fn div_assign(&mut self, rhs: F) {
                 *self = *self / rhs;
+            }
+        }
+        impl<F: Float, U: Unit<F>> Div<Self> for $ang<F, U> {
+            type Output = F;
+            #[inline]
+            fn div(self, rhs: Self) -> F {
+                self.val() / rhs.val()
             }
         }
     };
@@ -630,6 +637,8 @@ mod tests {
         let mut val = Rad64::FULL_TURN;
         val /= 3.0;
         assert_epsilon!(val.val(), PI * 2.0 / 3.0);
+
+        assert_eq!(Rad64::FULL_TURN / Rad64::QUARTER_TURN, 4.0);
     }
 
     #[test]
